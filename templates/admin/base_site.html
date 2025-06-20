@@ -1,0 +1,42 @@
+{% extends "admin/base.html" %}
+{% load static %}
+
+{% block title %}{{ title }} | Ресторан "LOGAN"{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">
+        <img src="{% static 'admin/img/logo.png' %}" alt="LOGAN" height="40" style="margin-right: 10px;">
+        Ресторан "LOGAN"
+    </a>
+</h1>
+{% endblock %}
+
+{% block nav-global %}{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    #header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    #branding h1, #branding h1 a:link, #branding h1 a:visited {
+        color: white;
+    }
+    
+    .module h2, .module caption, .inline-group h2 {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    .button, input[type=submit], input[type=button], .submit-row input, a.button {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border: none;
+    }
+    
+    .button:hover, input[type=submit]:hover, input[type=button]:hover, .submit-row input:hover, a.button:hover {
+        background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+    }
+</style>
+{% endblock %}

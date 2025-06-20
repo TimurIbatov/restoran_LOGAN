@@ -1,0 +1,351 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}План зала | Ресторан "LOGAN"{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+    .floor-plan-container {
+        position: relative;
+        width: 100%;
+        height: 600px;
+        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        margin: 20px 0;
+    }
+    
+    .zone {
+        position: absolute;
+        border: 2px dashed #667eea;
+        border-radius: 10px;
+        background: rgba(102, 126, 234, 0.1);
+        padding: 10px;
+        min-width: 150px;
+        min-height: 100px;
+    }
+    
+    .zone-label {
+        position: absolute;
+        top: -15px;
+        left: 10px;
+        background: #667eea;
+        color: white;
+        padding: 5px 15px;
+        border-radius: 15px;
+        font-size: 0.8em;
+        font-weight: bold;
+    }
+    
+    .table {
+        position: absolute;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 0.8em;
+        cursor: move;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        border: 3px solid white;
+        color: white;
+        user-select: none;
+    }
+    
+    .table:hover {
+        transform: scale(1.1);
+        z-index: 10;
+    }
+    
+    .table.available {
+        background: linear-gradient(135deg, #2ecc71, #27ae60);
+    }
+    
+    .table.occupied {
+        background: linear-gradient(135deg, #e74c3c, #c0392b);
+    }
+    
+    .table.reserved {
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+    }
+    
+    .table.vip {
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        border-color: gold;
+    }
+    
+    .table.dragging {
+        z-index: 1000;
+        transform: scale(1.2);
+    }
+    
+    .legend {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    .legend-item {
+        display: flex;
+        align-items: center;
+        margin-bottom: 8px;
+    }
+    
+    .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        margin-right: 10px;
+    }
+    
+    .controls {
+        margin: 20px 0;
+    }
+    
+    .save-positions {
+        background: #28a745;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-right: 10px;
+    }
+    
+    .reset-positions {
+        background: #dc3545;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    
+    .table-info {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        min-width: 200px;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Интерактивный план зала</h1>
+<p>Перетаскивайте столики для изменения их позиции на плане зала.</p>
+
+<div class="controls">
+    <button class="save-positions" onclick="savePositions()">
+        Сохранить позиции
+    </button>
+    <button class="reset-positions" onclick="resetPositions()">
+        Сбросить позиции
+    </button>
+</div>
+
+<div class="floor-plan-container" id="floorPlan">
+    <!-- Зоны -->
+    {% for zone in zones %}
+    <div class="zone" data-zone-id="{{ zone.id }}" style="left: {{ zone.id|add:50|mul:150 }}px; top: {{ zone.id|mod:2|mul:200|add:50 }}px; width: 200px; height: 150px;">
+        <div class="zone-label">{{ zone.name }}</div>
+    </div>
+    {% endfor %}
+    
+    <!-- Столики -->
+    {% for table in tables %}
+    <div class="table {{ table.current_status }}{% if table.is_vip %} vip{% endif %}" 
+         data-table-id="{{ table.id }}"
+         data-table-name="{{ table.name }}"
+         data-capacity="{{ table.capacity }}"
+         data-zone="{{ table.zone.name }}"
+         style="left: {{ table.position_x|default:100 }}px; top: {{ table.position_y|default:100 }}px;">
+        {{ table.name }}
+    </div>
+    {% endfor %}
+    
+    <!-- Легенда -->
+    <div class="legend">
+        <h6 class="mb-3">Статус столиков</h6>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #2ecc71, #27ae60);"></div>
+            <span>Свободен</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #f39c12, #e67e22);"></div>
+            <span>Забронирован</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #e74c3c, #c0392b);"></div>
+            <span>Занят</span>
+        </div>
+        <div class="legend-item">
+            <div class="legend-color" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); border: 2px solid gold;"></div>
+            <span>VIP столик</span>
+        </div>
+    </div>
+    
+    <!-- Информация о столике -->
+    <div class="table-info" id="tableInfo">
+        <h6 id="tableInfoTitle">Информация о столике</h6>
+        <div id="tableInfoContent"></div>
+    </div>
+</div>
+
+<script>
+let isDragging = false;
+let currentTable = null;
+let offset = { x: 0, y: 0 };
+let changedPositions = {};
+
+document.addEventListener('DOMContentLoaded', function() {
+    initDragAndDrop();
+});
+
+function initDragAndDrop() {
+    const tables = document.querySelectorAll('.table');
+    
+    tables.forEach(table => {
+        table.addEventListener('mousedown', startDrag);
+        table.addEventListener('click', showTableInfo);
+    });
+    
+    document.addEventListener('mousemove', drag);
+    document.addEventListener('mouseup', stopDrag);
+}
+
+function startDrag(e) {
+    e.preventDefault();
+    isDragging = true;
+    currentTable = e.target;
+    currentTable.classList.add('dragging');
+    
+    const rect = currentTable.getBoundingClientRect();
+    const containerRect = document.getElementById('floorPlan').getBoundingClientRect();
+    
+    offset.x = e.clientX - rect.left;
+    offset.y = e.clientY - rect.top;
+}
+
+function drag(e) {
+    if (!isDragging || !currentTable) return;
+    
+    e.preventDefault();
+    
+    const containerRect = document.getElementById('floorPlan').getBoundingClientRect();
+    const x = e.clientX - containerRect.left - offset.x;
+    const y = e.clientY - containerRect.top - offset.y;
+    
+    // Ограничиваем перемещение границами контейнера
+    const maxX = containerRect.width - 60;
+    const maxY = containerRect.height - 60;
+    
+    const constrainedX = Math.max(0, Math.min(x, maxX));
+    const constrainedY = Math.max(0, Math.min(y, maxY));
+    
+    currentTable.style.left = constrainedX + 'px';
+    currentTable.style.top = constrainedY + 'px';
+    
+    // Сохраняем изменения
+    const tableId = currentTable.dataset.tableId;
+    changedPositions[tableId] = {
+        x: constrainedX,
+        y: constrainedY
+    };
+}
+
+function stopDrag() {
+    if (currentTable) {
+        currentTable.classList.remove('dragging');
+        currentTable = null;
+    }
+    isDragging = false;
+}
+
+function showTableInfo(e) {
+    if (isDragging) return;
+    
+    const table = e.target;
+    const infoEl = document.getElementById('tableInfo');
+    const titleEl = document.getElementById('tableInfoTitle');
+    const contentEl = document.getElementById('tableInfoContent');
+    
+    titleEl.textContent = `Столик ${table.dataset.tableName}`;
+    contentEl.innerHTML = `
+        <p><strong>Вместимость:</strong> ${table.dataset.capacity} человек</p>
+        <p><strong>Зона:</strong> ${table.dataset.zone}</p>
+        <p><strong>Позиция:</strong> (${parseInt(table.style.left)}, ${parseInt(table.style.top)})</p>
+    `;
+    
+    infoEl.style.display = 'block';
+}
+
+async function savePositions() {
+    if (Object.keys(changedPositions).length === 0) {
+        alert('Нет изменений для сохранения');
+        return;
+    }
+    
+    try {
+        for (const [tableId, position] of Object.entries(changedPositions)) {
+            const formData = new FormData();
+            formData.append('table_id', tableId);
+            formData.append('position_x', position.x);
+            formData.append('position_y', position.y);
+            formData.append('csrfmiddlewaretoken', '{{ csrf_token }}');
+            
+            const response = await fetch('{% url "admin:table_floor_plan" %}', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (!response.ok) {
+                throw new Error('Ошибка сохранения');
+            }
+        }
+        
+        changedPositions = {};
+        alert('Позиции столиков успешно сохранены!');
+        
+    } catch (error) {
+        console.error('Ошибка:', error);
+        alert('Ошибка при сохранении позиций');
+    }
+}
+
+function resetPositions() {
+    if (confirm('Вы уверены, что хотите сбросить все позиции столиков?')) {
+        const tables = document.querySelectorAll('.table');
+        tables.forEach((table, index) => {
+            const x = 100 + (index % 5) * 80;
+            const y = 100 + Math.floor(index / 5) * 80;
+            
+            table.style.left = x + 'px';
+            table.style.top = y + 'px';
+            
+            changedPositions[table.dataset.tableId] = { x, y };
+        });
+    }
+}
+
+// Скрываем информацию о столике при клике вне его
+document.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('table')) {
+        document.getElementById('tableInfo').style.display = 'none';
+    }
+});
+</script>
+{% endblock %}

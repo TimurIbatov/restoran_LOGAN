@@ -1,0 +1,269 @@
+/* Кастомные стили для ресторана LOGAN */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.page-header {
+  background-size: cover;
+  background-position: center;
+  color: white;
+  padding: 80px 0;
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.page-header.login-header {
+  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+              url('https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80');
+}
+
+.page-header.menu-header {
+  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+              url('https://images.unsplash.com/photo-1514326640560-7d063ef2aed5?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80');
+}
+
+.page-header.tables-header {
+  background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+              url('https://images.unsplash.com/photo-1559329007-40df8a9345d8?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80');
+}
+
+.menu-item {
+  margin-bottom: 30px;
+  transition: transform 0.3s;
+}
+
+.menu-item:hover {
+  transform: translateY(-10px);
+}
+
+.menu-item-image {
+  border-radius: 10px;
+  overflow: hidden;
+  height: 200px;
+  margin-bottom: 15px;
+}
+
+.menu-item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s;
+}
+
+.menu-item:hover .menu-item-image img {
+  transform: scale(1.1);
+}
+
+.menu-category-title {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 30px;
+  padding-bottom: 10px;
+}
+
+.menu-category-title::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 50px;
+  height: 3px;
+  background-color: #0d6efd;
+}
+
+.table-card {
+  border: none;
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  transition: all 0.3s ease;
+  margin-bottom: 30px;
+  cursor: pointer;
+  background: white;
+}
+
+.table-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
+}
+
+.table-card .card-img-top {
+  height: 200px;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.table-card:hover .card-img-top {
+  transform: scale(1.05);
+}
+
+.table-status {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  padding: 8px 12px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.status-available {
+  background: linear-gradient(45deg, #28a745, #20c997);
+  color: white;
+}
+
+.status-partially {
+  background: linear-gradient(45deg, #ffc107, #fd7e14);
+  color: white;
+}
+
+.status-booked {
+  background: linear-gradient(45deg, #dc3545, #e83e8c);
+  color: white;
+}
+
+.profile-section {
+  background-color: #f8f9fa;
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 30px;
+}
+
+.booking-card {
+  border-left: 5px solid #0d6efd;
+  margin-bottom: 15px;
+}
+
+.booking-card.pending {
+  border-left-color: #ffc107;
+}
+
+.booking-card.confirmed {
+  border-left-color: #198754;
+}
+
+.booking-card.cancelled {
+  border-left-color: #dc3545;
+}
+
+.booking-card.completed {
+  border-left-color: #6c757d;
+}
+
+.filters {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+}
+
+.menu-filters {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 30px;
+}
+
+.special-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background-color: #dc3545;
+  color: white;
+  padding: 5px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.zone-header {
+  position: relative;
+  overflow: hidden;
+  border-radius: 15px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  margin-bottom: 2rem;
+}
+
+.zone-image {
+  transition: transform 0.3s ease;
+  height: 250px;
+  object-fit: cover;
+}
+
+.zone-header:hover .zone-image {
+  transform: scale(1.05);
+}
+
+.zone-overlay {
+  background: linear-gradient(45deg, rgba(0,0,0,0.5), rgba(0,0,0,0.3)) !important;
+  backdrop-filter: blur(2px);
+  transition: background 0.3s ease;
+}
+
+.zone-header:hover .zone-overlay {
+  background: linear-gradient(45deg, rgba(0,0,0,0.3), rgba(0,0,0,0.1)) !important;
+}
+
+.zone-overlay h2 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+  letter-spacing: 1px;
+}
+
+.loading-spinner {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 200px;
+}
+
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: all;
+  min-width: 300px;
+}
+
+@media (max-width: 768px) {
+  .zone-overlay h2 {
+    font-size: 1.8rem;
+  }
+  
+  .zone-image {
+    height: 180px !important;
+  }
+  
+  .table-card .card-img-top {
+    height: 150px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .zone-overlay h2 {
+    font-size: 1.5rem;
+  }
+  
+  .table-card .card-body {
+    padding: 1rem;
+  }
+
+  .zone-image {
+    height: 150px !important;
+  }
+}
