@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
-import { getMockData } from '../utils/api'
+import { restaurantAPI, bookingAPI } from '../utils/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const Booking = () => {
   const [searchParams] = useSearchParams()
   const [selectedTable, setSelectedTable] = useState(null)
   const [tables, setTables] = useState([])
+  const [availableSlots, setAvailableSlots] = useState([])
   const [bookingData, setBookingData] = useState({
     date: '',
     time: '',
@@ -38,17 +39,22 @@ const Booking = () => {
     loadTables()
   }, [isAuthenticated, navigate, searchParams])
 
+  useEffect(() => {
+    if (bookingData.date && bookingData.tableId) {
+      loadAvailableSlots()
+    }
+  }, [bookingData.date, bookingData.tableId])
+
   const loadTables = async () => {
     try {
       setLoading(true)
-      const data = await getMockData('tables')
-      const tablesData = data.tables || []
-      setTables(tablesData)
+      const data = await restaurantAPI.getTables()
+      setTables(data || [])
 
       // Если есть выбранный столик, найдем его
       const tableId = bookingData.tableId || parseInt(searchParams.get('table'))
       if (tableId) {
-        const table = tablesData.find(t => t.id === tableId)
+        const table = data.find(t => t.id === tableId)
         if (table) {
           setSelectedTable(table)
           setBookingData(prev => ({ ...prev, tableId: table.id }))
@@ -59,6 +65,22 @@ const Booking = () => {
       showToast('Ошибка', 'Не удалось загрузить информацию о столиках', 'error')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadAvailableSlots = async () => {
+    try {
+      const params = {
+        date: bookingData.date,
+        table_id: bookingData.tableId,
+        duration: 120 // 2 часа по умолчанию
+      }
+      
+      const data = await bookingAPI.getAvailableSlots(params)
+      setAvailableSlots(data.available_slots || [])
+    } catch (error) {
+      console.error('Ошибка загрузки доступных слотов:', error)
+      setAvailableSlots([])
     }
   }
 
@@ -78,6 +100,13 @@ const Booking = () => {
     })
   }
 
+  const handleTimeSlotSelect = (slot) => {
+    setBookingData({
+      ...bookingData,
+      time: slot.start_time
+    })
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     
@@ -94,8 +123,21 @@ const Booking = () => {
     setSubmitting(true)
 
     try {
-      // Симулируем отправку бронирования
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      const startDateTime = new Date(`${bookingData.date}T${bookingData.time}`)
+      const endDateTime = new Date(startDateTime.getTime() + 2 * 60 * 60 * 1000) // +2 часа
+
+      const bookingPayload = {
+        table: selectedTable.id,
+        start_time: startDateTime.toISOString(),
+        end_time: endDateTime.toISOString(),
+        guests_count: parseInt(bookingData.guests),
+        comment: bookingData.comment,
+        contact_name: user.full_name || `${user.first_name} ${user.last_name}`,
+        contact_phone: user.phone || '',
+        contact_email: user.email
+      }
+
+      await bookingAPI.createBooking(bookingPayload)
       
       showToast('Успешно', 'Бронирование успешно создано!', 'success')
       
@@ -105,7 +147,7 @@ const Booking = () => {
       // Переходим в личный кабинет
       navigate('/personal-cabinet')
     } catch (error) {
-      showToast('Ошибка', 'Не удалось создать бронирование', 'error')
+      showToast('Ошибка', error.message || 'Не удалось создать бронирование', 'error')
     } finally {
       setSubmitting(false)
     }
@@ -155,33 +197,48 @@ const Booking = () => {
                         />
                       </div>
                       <div className="col-md-6 mb-3">
-                        <label htmlFor="time" className="form-label">Время</label>
+                        <label htmlFor="guests" className="form-label">Количество гостей</label>
                         <input
-                          type="time"
+                          type="number"
                           className="form-control"
-                          id="time"
-                          name="time"
-                          value={bookingData.time}
+                          id="guests"
+                          name="guests"
+                          value={bookingData.guests}
                           onChange={handleInputChange}
+                          min="1"
+                          max="10"
                           required
                         />
                       </div>
                     </div>
 
-                    <div className="mb-3">
-                      <label htmlFor="guests" className="form-label">Количество гостей</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        id="guests"
-                        name="guests"
-                        value={bookingData.guests}
-                        onChange={handleInputChange}
-                        min="1"
-                        max="10"
-                        required
-                      />
-                    </div>
+                    {/* Доступные временные слоты */}
+                    {bookingData.date && selectedTable && (
+                      <div className="mb-3">
+                        <label className="form-label">Доступное время</label>
+                        <div className="row">
+                          {availableSlots.length > 0 ? (
+                            availableSlots.map((slot, index) => (
+                              <div key={index} className="col-md-3 mb-2">
+                                <button
+                                  type="button"
+                                  className={`btn w-100 ${bookingData.time === slot.start_time ? 'btn-primary' : 'btn-outline-primary'}`}
+                                  onClick={() => handleTimeSlotSelect(slot)}
+                                >
+                                  {slot.start_time} - {slot.end_time}
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="col-12">
+                              <div className="alert alert-warning">
+                                На выбранную дату нет доступных временных слотов
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="mb-3">
                       <label htmlFor="comment" className="form-label">Комментарий</label>
@@ -228,7 +285,7 @@ const Booking = () => {
                       <button
                         type="submit"
                         className="btn btn-primary btn-lg"
-                        disabled={submitting || !selectedTable}
+                        disabled={submitting || !selectedTable || !bookingData.time}
                       >
                         {submitting ? (
                           <>
@@ -274,10 +331,16 @@ const Booking = () => {
                         <i className="bi bi-geo-alt-fill me-1"></i>
                         Зона: {selectedTable.zone_name}
                       </p>
+                      {selectedTable.deposit > 0 && (
+                        <p className="mb-2">
+                          <i className="bi bi-credit-card me-1"></i>
+                          Депозит: {selectedTable.deposit.toLocaleString()} сум
+                        </p>
+                      )}
                       <div className="mt-3">
                         <small className="text-muted">
                           <i className="bi bi-person-circle me-1"></i>
-                          Гость: {user?.name || user?.email}
+                          Гость: {user?.full_name || user?.email}
                         </small>
                       </div>
                     </div>
@@ -303,7 +366,7 @@ const Booking = () => {
                     • Бронирование действительно 15 минут<br/>
                     • Отмена возможна за 2 часа до времени<br/>
                     • При опоздании на 15 минут бронь снимается<br/>
-                    • Предоплата не требуется<br/>
+                    • Стандартная продолжительность: 2 часа<br/>
                   </small>
                 </div>
               </div>

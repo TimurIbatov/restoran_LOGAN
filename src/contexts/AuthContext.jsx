@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react'
-import { apiRequest } from '../utils/api'
+import { login as apiLogin, register as apiRegister, getCurrentUser, logout as apiLogout } from '../utils/api'
 
 const AuthContext = createContext()
 
@@ -22,21 +22,23 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuth = async () => {
     try {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem('access_token')
       if (!token) {
         setLoading(false)
         return
       }
 
-      const response = await apiRequest('/auth/check', 'GET')
-      if (response.user) {
-        setUser(response.user)
+      const userData = await getCurrentUser()
+      if (userData) {
+        setUser(userData)
         setIsAuthenticated(true)
       } else {
-        localStorage.removeItem('token')
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
       }
     } catch (error) {
-      localStorage.removeItem('token')
+      localStorage.removeItem('access_token')
+      localStorage.removeItem('refresh_token')
       console.error('Auth check failed:', error)
     } finally {
       setLoading(false)
@@ -45,16 +47,16 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     try {
-      const response = await apiRequest('/auth/login', 'POST', { email, password })
+      await apiLogin(email, password)
+      const userData = await getCurrentUser()
       
-      if (response.token) {
-        localStorage.setItem('token', response.token)
-        setUser(response.user)
+      if (userData) {
+        setUser(userData)
         setIsAuthenticated(true)
         return { success: true }
       }
       
-      return { success: false, error: 'Неверные данные для входа' }
+      return { success: false, error: 'Не удалось получить данные пользователя' }
     } catch (error) {
       return { success: false, error: error.message || 'Ошибка при входе' }
     }
@@ -62,32 +64,34 @@ export const AuthProvider = ({ children }) => {
 
   const register = async (userData) => {
     try {
-      const response = await apiRequest('/auth/register', 'POST', userData)
+      await apiRegister({
+        email: userData.email,
+        username: userData.email,
+        first_name: userData.firstName,
+        last_name: userData.lastName,
+        phone: userData.phone,
+        password: userData.password
+      })
       
-      if (response.token) {
-        localStorage.setItem('token', response.token)
-        setUser(response.user)
-        setIsAuthenticated(true)
-        return { success: true }
-      }
-      
-      return { success: false, error: 'Ошибка при регистрации' }
+      // После регистрации автоматически логинимся
+      const loginResult = await login(userData.email, userData.password)
+      return loginResult
     } catch (error) {
       return { success: false, error: error.message || 'Ошибка при регистрации' }
     }
   }
 
   const logout = () => {
-    localStorage.removeItem('token')
+    apiLogout()
     setUser(null)
     setIsAuthenticated(false)
   }
 
   const updateProfile = async (profileData) => {
     try {
-      const response = await apiRequest('/users/profile', 'PUT', profileData)
-      if (response.user) {
-        setUser(response.user)
+      const response = await accountAPI.updateProfile(profileData)
+      if (response) {
+        setUser(response)
         return { success: true }
       }
       return { success: false, error: 'Ошибка при обновлении профиля' }

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
-import { getMockData } from '../utils/api'
+import { restaurantAPI } from '../utils/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const Tables = () => {
@@ -47,8 +47,8 @@ const Tables = () => {
   const loadTables = async () => {
     try {
       setLoading(true)
-      const data = await getMockData('tables')
-      setTables(data.tables || [])
+      const data = await restaurantAPI.getTables()
+      setTables(data || [])
     } catch (error) {
       console.error('Ошибка загрузки столиков:', error)
       showToast('Ошибка', 'Не удалось загрузить столики', 'error')
@@ -59,20 +59,8 @@ const Tables = () => {
 
   const loadFloorPlan = async () => {
     try {
-      // Здесь должен быть запрос к API для получения плана зала
-      const mockFloorPlan = {
-        zones: [
-          { id: 1, name: 'Основной зал', slug: 'main' },
-          { id: 2, name: 'VIP-зона', slug: 'vip' },
-          { id: 3, name: 'Терраса', slug: 'terrace' }
-        ],
-        tables: tables.map(table => ({
-          ...table,
-          position_x: Math.random() * 600,
-          position_y: Math.random() * 400
-        }))
-      }
-      setFloorPlanData(mockFloorPlan)
+      const data = await restaurantAPI.getFloorPlan()
+      setFloorPlanData(data)
     } catch (error) {
       console.error('Ошибка загрузки плана зала:', error)
     }
@@ -207,8 +195,8 @@ const Tables = () => {
                     Забронировать
                   </button>
                 </div>
-                <div className={`table-status ${getStatusClass(table.status)}`}>
-                  {getStatusText(table.status)}
+                <div className={`table-status ${getStatusClass(table.current_status)}`}>
+                  {getStatusText(table.current_status)}
                 </div>
               </div>
             </div>
@@ -246,7 +234,7 @@ const Tables = () => {
           {filteredTables.map(table => (
             <div
               key={table.id}
-              className={`table-marker ${table.status} ${table.is_vip ? 'vip' : ''}`}
+              className={`table-marker ${table.current_status} ${table.is_vip ? 'vip' : ''}`}
               style={{
                 left: `${table.position_x || Math.random() * 600}px`,
                 top: `${table.position_y || Math.random() * 400}px`

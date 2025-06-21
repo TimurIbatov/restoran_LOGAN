@@ -1,7 +1,7 @@
-const API_BASE_URL = 'http://localhost:8000/api' // Замените на ваш API URL
+const API_BASE_URL = 'http://localhost:8000/api'
 
 export const apiRequest = async (endpoint, method = 'GET', data = null) => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('access_token')
   
   const config = {
     method,
@@ -19,8 +19,26 @@ export const apiRequest = async (endpoint, method = 'GET', data = null) => {
     const response = await fetch(`${API_BASE_URL}${endpoint}`, config)
     
     if (!response.ok) {
+      if (response.status === 401) {
+        // Токен истек, пробуем обновить
+        const refreshed = await refreshToken()
+        if (refreshed) {
+          // Повторяем запрос с новым токеном
+          config.headers.Authorization = `Bearer ${localStorage.getItem('access_token')}`
+          const retryResponse = await fetch(`${API_BASE_URL}${endpoint}`, config)
+          if (retryResponse.ok) {
+            return await retryResponse.json()
+          }
+        }
+        // Если обновление не удалось, перенаправляем на логин
+        localStorage.removeItem('access_token')
+        localStorage.removeItem('refresh_token')
+        window.location.href = '/login'
+        throw new Error('Authentication required')
+      }
+      
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`)
+      throw new Error(errorData.detail || errorData.message || `HTTP error! status: ${response.status}`)
     }
 
     return await response.json()
@@ -30,115 +48,149 @@ export const apiRequest = async (endpoint, method = 'GET', data = null) => {
   }
 }
 
-// Мок данные для демонстрации
-export const mockData = {
-  menuItems: [
-    {
-      id: 1,
-      name: 'Стейк Рибай',
-      description: 'Сочный стейк из говядины, приготовленный на гриле',
-      price: 85000,
-      category: 'Основные блюда',
-      category_slug: 'main',
-      image: 'https://images.unsplash.com/photo-1546833999-b9f581a1996d?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_special: true
-    },
-    {
-      id: 2,
-      name: 'Салат Цезарь',
-      description: 'Классический салат с курицей, пармезаном и соусом цезарь',
-      price: 35000,
-      category: 'Салаты',
-      category_slug: 'salads',
-      image: 'https://images.unsplash.com/photo-1546793665-c74683f339c1?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_special: false
-    },
-    {
-      id: 3,
-      name: 'Борщ украинский',
-      description: 'Традиционный борщ с говядиной и сметаной',
-      price: 25000,
-      category: 'Супы',
-      category_slug: 'soups',
-      image: 'https://images.unsplash.com/photo-1547592166-23ac45744acd?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_special: false
-    },
-    {
-      id: 4,
-      name: 'Тирамису',
-      description: 'Классический итальянский десерт',
-      price: 28000,
-      category: 'Десерты',
-      category_slug: 'desserts',
-      image: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_special: true
-    }
-  ],
-  tables: [
-    {
-      id: 1,
-      name: 'Столик №1',
-      capacity: 2,
-      zone_name: 'Основной зал',
-      zone_slug: 'main',
-      status: 'available',
-      image: 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_active: true
-    },
-    {
-      id: 2,
-      name: 'Столик №2',
-      capacity: 4,
-      zone_name: 'Терраса',
-      zone_slug: 'terrace',
-      status: 'available',
-      image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_active: true
-    },
-    {
-      id: 3,
-      name: 'VIP Столик №1',
-      capacity: 6,
-      zone_name: 'VIP-зона',
-      zone_slug: 'vip',
-      status: 'partially',
-      image: 'https://images.unsplash.com/photo-1559329007-40df8a9345d8?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80',
-      is_active: true
-    }
-  ],
-  bookings: [
-    {
-      id: 1,
-      date: '2025-01-15',
-      time: '19:00',
-      guests: 2,
-      status: 'confirmed',
-      comment: 'Столик у окна',
-      table: {
-        id: 1,
-        name: 'Столик №1'
+// Функция для обновления токена
+const refreshToken = async () => {
+  const refreshToken = localStorage.getItem('refresh_token')
+  if (!refreshToken) return false
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/jwt/refresh/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
       },
-      menu_items: [
-        {
-          name: 'Стейк Рибай',
-          quantity: 1,
-          price: 85000
-        },
-        {
-          name: 'Салат Цезарь',
-          quantity: 1,
-          price: 35000
-        }
-      ]
+      body: JSON.stringify({ refresh: refreshToken })
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      localStorage.setItem('access_token', data.access)
+      return true
     }
-  ]
+  } catch (error) {
+    console.error('Token refresh failed:', error)
+  }
+  
+  return false
 }
 
-// Функция для получения данных с fallback на mock
-export const getMockData = (type) => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({ [type]: mockData[type] })
-    }, 500)
-  })
+// Функция для логина
+export const login = async (email, password) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/jwt/create/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password })
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Неверные данные для входа')
+    }
+
+    const data = await response.json()
+    localStorage.setItem('access_token', data.access)
+    localStorage.setItem('refresh_token', data.refresh)
+    
+    return data
+  } catch (error) {
+    throw error
+  }
+}
+
+// Функция для регистрации
+export const register = async (userData) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/users/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(userData)
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Ошибка при регистрации')
+    }
+
+    const data = await response.json()
+    return data
+  } catch (error) {
+    throw error
+  }
+}
+
+// Функция для получения текущего пользователя
+export const getCurrentUser = async () => {
+  try {
+    return await apiRequest('/accounts/current/')
+  } catch (error) {
+    return null
+  }
+}
+
+// Функция для выхода
+export const logout = () => {
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+  window.location.href = '/'
+}
+
+// API функции для ресторана
+export const restaurantAPI = {
+  // Зоны
+  getZones: () => apiRequest('/restaurant/zones/'),
+  
+  // Столики
+  getTables: () => apiRequest('/restaurant/tables/'),
+  getFloorPlan: () => apiRequest('/restaurant/floor-plan/'),
+  
+  // Меню
+  getMenuCategories: () => apiRequest('/restaurant/menu/categories/'),
+  getMenuItems: () => apiRequest('/restaurant/menu/items/'),
+  
+  // Настройки ресторана
+  getSettings: () => apiRequest('/restaurant/settings/'),
+}
+
+// API функции для бронирований
+export const bookingAPI = {
+  // Получить бронирования пользователя
+  getUserBookings: () => apiRequest('/bookings/'),
+  
+  // Создать бронирование
+  createBooking: (data) => apiRequest('/bookings/', 'POST', data),
+  
+  // Получить доступные слоты
+  getAvailableSlots: (params) => {
+    const queryString = new URLSearchParams(params).toString()
+    return apiRequest(`/bookings/available-slots/?${queryString}`)
+  },
+  
+  // Отменить бронирование
+  cancelBooking: (id, reason) => apiRequest(`/bookings/${id}/cancel/`, 'POST', { reason }),
+  
+  // Подтвердить бронирование (админ)
+  confirmBooking: (id) => apiRequest(`/bookings/${id}/confirm/`, 'POST'),
+  
+  // Статистика бронирований (админ)
+  getStatistics: () => apiRequest('/bookings/statistics/'),
+}
+
+// API функции для аккаунтов
+export const accountAPI = {
+  // Получить профиль
+  getProfile: () => apiRequest('/accounts/profile/'),
+  
+  // Обновить профиль
+  updateProfile: (data) => apiRequest('/accounts/profile/', 'PUT', data),
+  
+  // Изменить пароль
+  changePassword: (data) => apiRequest('/accounts/change-password/', 'POST', data),
+  
+  // Получить список пользователей (админ)
+  getUsers: () => apiRequest('/accounts/users/'),
 }

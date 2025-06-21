@@ -171,6 +171,20 @@ CORS_ALLOWED_ORIGINS = [
 
 CORS_ALLOW_CREDENTIALS = True
 
+# Djoser settings
+DJOSER = {
+    'SERIALIZERS': {
+        'user_create': 'apps.accounts.serializers.UserSerializer',
+        'user': 'apps.accounts.serializers.UserSerializer',
+        'current_user': 'apps.accounts.serializers.UserSerializer',
+    },
+    'PERMISSIONS': {
+        'user': ['rest_framework.permissions.IsAuthenticated'],
+        'user_list': ['rest_framework.permissions.IsAdminUser'],
+    },
+    'HIDE_USERS': False,
+}
+
 # Celery Configuration
 CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')

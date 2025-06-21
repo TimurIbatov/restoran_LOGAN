@@ -136,6 +136,29 @@ const Login = () => {
                     </Link>
                   </div>
                 </form>
+
+                {/* Демо аккаунты */}
+                <div className="mt-4 pt-3 border-top">
+                  <h6 className="text-muted mb-3">Демо аккаунты для тестирования:</h6>
+                  <div className="row">
+                    <div className="col-md-6 mb-2">
+                      <button 
+                        className="btn btn-outline-info btn-sm w-100"
+                        onClick={() => setFormData({email: 'admin@logan.com', password: 'admin123'})}
+                      >
+                        👨‍💼 Администратор
+                      </button>
+                    </div>
+                    <div className="col-md-6 mb-2">
+                      <button 
+                        className="btn btn-outline-success btn-sm w-100"
+                        onClick={() => setFormData({email: 'user@logan.com', password: 'user123'})}
+                      >
+                        👤 Пользователь
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>

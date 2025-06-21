@@ -2,20 +2,21 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
-import { getMockData } from '../utils/api'
+import { bookingAPI, accountAPI } from '../utils/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 
 const PersonalCabinet = () => {
   const [profileData, setProfileData] = useState({
-    name: '',
+    first_name: '',
+    last_name: '',
     email: '',
     phone: '',
     address: ''
   })
   const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: ''
+    current_password: '',
+    new_password: '',
+    confirm_password: ''
   })
   const [bookings, setBookings] = useState([])
   const [loading, setLoading] = useState(true)
@@ -37,22 +38,26 @@ const PersonalCabinet = () => {
     loadBookingHistory()
   }, [isAuthenticated, user, navigate])
 
-  const loadUserData = () => {
-    if (user) {
+  const loadUserData = async () => {
+    try {
+      const userData = await accountAPI.getProfile()
       setProfileData({
-        name: user.name || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        address: user.address || ''
+        first_name: userData.first_name || '',
+        last_name: userData.last_name || '',
+        email: userData.email || '',
+        phone: userData.phone || '',
+        address: userData.address || ''
       })
+    } catch (error) {
+      console.error('Ошибка загрузки профиля:', error)
     }
   }
 
   const loadBookingHistory = async () => {
     try {
       setLoading(true)
-      const data = await getMockData('bookings')
-      setBookings(data.bookings || [])
+      const data = await bookingAPI.getUserBookings()
+      setBookings(data || [])
     } catch (error) {
       console.error('Ошибка загрузки бронирований:', error)
       showToast('Ошибка', 'Не удалось загрузить историю бронирований', 'error')
@@ -80,14 +85,11 @@ const PersonalCabinet = () => {
     setProfileLoading(true)
 
     try {
-      const result = await updateProfile(profileData)
-      if (result.success) {
-        showToast('Успешно', 'Профиль успешно обновлен', 'success')
-      } else {
-        showToast('Ошибка', result.error || 'Не удалось обновить профиль', 'error')
-      }
+      await accountAPI.updateProfile(profileData)
+      showToast('Успешно', 'Профиль успешно обновлен', 'success')
+      loadUserData()
     } catch (error) {
-      showToast('Ошибка', 'Произошла ошибка при обновлении профиля', 'error')
+      showToast('Ошибка', error.message || 'Не удалось обновить профиль', 'error')
     } finally {
       setProfileLoading(false)
     }
@@ -96,7 +98,7 @@ const PersonalCabinet = () => {
   const handlePasswordSubmit = async (e) => {
     e.preventDefault()
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
+    if (passwordData.new_password !== passwordData.confirm_password) {
       showToast('Ошибка', 'Пароли не совпадают', 'error')
       return
     }
@@ -104,18 +106,19 @@ const PersonalCabinet = () => {
     setPasswordLoading(true)
 
     try {
-      // Здесь должен быть вызов API для смены пароля
-      // Пока просто симулируем успешную смену
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await accountAPI.changePassword({
+        current_password: passwordData.current_password,
+        new_password: passwordData.new_password
+      })
       
       showToast('Успешно', 'Пароль успешно изменен', 'success')
       setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: ''
+        current_password: '',
+        new_password: '',
+        confirm_password: ''
       })
     } catch (error) {
-      showToast('Ошибка', 'Не удалось изменить пароль', 'error')
+      showToast('Ошибка', error.message || 'Не удалось изменить пароль', 'error')
     } finally {
       setPasswordLoading(false)
     }
@@ -154,11 +157,11 @@ const PersonalCabinet = () => {
   const cancelBooking = async (bookingId) => {
     if (window.confirm('Вы уверены, что хотите отменить бронирование?')) {
       try {
-        // Здесь должен быть вызов API для отмены бронирования
+        await bookingAPI.cancelBooking(bookingId, 'Отменено пользователем')
         showToast('Успешно', 'Бронирование успешно отменено', 'success')
         loadBookingHistory()
       } catch (error) {
-        showToast('Ошибка', 'Не удалось отменить бронирование', 'error')
+        showToast('Ошибка', error.message || 'Не удалось отменить бронирование', 'error')
       }
     }
   }
@@ -184,22 +187,33 @@ const PersonalCabinet = () => {
               <h3 className="mb-3">Мой профиль</h3>
               <form onSubmit={handleProfileSubmit}>
                 <div className="mb-3">
-                  <label htmlFor="userName" className="form-label">Имя</label>
+                  <label htmlFor="first_name" className="form-label">Имя</label>
                   <input
                     type="text"
                     className="form-control"
-                    id="userName"
-                    name="name"
-                    value={profileData.name}
+                    id="first_name"
+                    name="first_name"
+                    value={profileData.first_name}
                     onChange={handleProfileChange}
                   />
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="userEmail" className="form-label">Email</label>
+                  <label htmlFor="last_name" className="form-label">Фамилия</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    id="last_name"
+                    name="last_name"
+                    value={profileData.last_name}
+                    onChange={handleProfileChange}
+                  />
+                </div>
+                <div className="mb-3">
+                  <label htmlFor="email" className="form-label">Email</label>
                   <input
                     type="email"
                     className="form-control"
-                    id="userEmail"
+                    id="email"
                     name="email"
                     value={profileData.email}
                     onChange={handleProfileChange}
@@ -207,21 +221,21 @@ const PersonalCabinet = () => {
                   />
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="userPhone" className="form-label">Телефон</label>
+                  <label htmlFor="phone" className="form-label">Телефон</label>
                   <input
                     type="tel"
                     className="form-control"
-                    id="userPhone"
+                    id="phone"
                     name="phone"
                     value={profileData.phone}
                     onChange={handleProfileChange}
                   />
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="userAddress" className="form-label">Адрес</label>
+                  <label htmlFor="address" className="form-label">Адрес</label>
                   <textarea
                     className="form-control"
-                    id="userAddress"
+                    id="address"
                     name="address"
                     rows="2"
                     value={profileData.address}
@@ -249,43 +263,43 @@ const PersonalCabinet = () => {
               <h3 className="mb-3">Изменить пароль</h3>
               <form onSubmit={handlePasswordSubmit}>
                 <div className="mb-3">
-                  <label htmlFor="currentPassword" className="form-label">
+                  <label htmlFor="current_password" className="form-label">
                     Текущий пароль
                   </label>
                   <input
                     type="password"
                     className="form-control"
-                    id="currentPassword"
-                    name="currentPassword"
-                    value={passwordData.currentPassword}
+                    id="current_password"
+                    name="current_password"
+                    value={passwordData.current_password}
                     onChange={handlePasswordChange}
                     required
                   />
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="newPassword" className="form-label">
+                  <label htmlFor="new_password" className="form-label">
                     Новый пароль
                   </label>
                   <input
                     type="password"
                     className="form-control"
-                    id="newPassword"
-                    name="newPassword"
-                    value={passwordData.newPassword}
+                    id="new_password"
+                    name="new_password"
+                    value={passwordData.new_password}
                     onChange={handlePasswordChange}
                     required
                   />
                 </div>
                 <div className="mb-3">
-                  <label htmlFor="confirmPassword" className="form-label">
+                  <label htmlFor="confirm_password" className="form-label">
                     Подтвердите пароль
                   </label>
                   <input
                     type="password"
                     className="form-control"
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    value={passwordData.confirmPassword}
+                    id="confirm_password"
+                    name="confirm_password"
+                    value={passwordData.confirm_password}
                     onChange={handlePasswordChange}
                     required
                   />
@@ -330,11 +344,11 @@ const PersonalCabinet = () => {
                           </span>
                         </div>
                         <p className="card-text">
-                          <strong>Дата:</strong> {new Date(booking.date).toLocaleDateString('ru-RU')}<br/>
-                          <strong>Время:</strong> {booking.time}<br/>
-                          <strong>Столик:</strong> {booking.table.name}<br/>
-                          <strong>Количество гостей:</strong> {booking.guests}<br/>
-                          <strong>Комментарий:</strong> {booking.comment}
+                          <strong>Дата:</strong> {new Date(booking.start_time).toLocaleDateString('ru-RU')}<br/>
+                          <strong>Время:</strong> {new Date(booking.start_time).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})} - {new Date(booking.end_time).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'})}<br/>
+                          <strong>Столик:</strong> {booking.table_details?.name}<br/>
+                          <strong>Количество гостей:</strong> {booking.guests_count}<br/>
+                          {booking.comment && <><strong>Комментарий:</strong> {booking.comment}<br/></>}
                         </p>
 
                         {booking.menu_items && booking.menu_items.length > 0 && (
@@ -343,7 +357,7 @@ const PersonalCabinet = () => {
                             <ul className="list-group list-group-flush">
                               {booking.menu_items.map((item, index) => (
                                 <li key={index} className="list-group-item d-flex justify-content-between align-items-center px-0 bg-transparent">
-                                  {item.name}
+                                  {item.menu_item_details?.name}
                                   <span>{item.quantity} x {item.price.toLocaleString()} сум</span>
                                 </li>
                               ))}
@@ -351,7 +365,7 @@ const PersonalCabinet = () => {
                           </div>
                         )}
 
-                        {(booking.status === 'pending' || booking.status === 'confirmed') && (
+                        {booking.can_be_cancelled && (
                           <div className="mt-3">
                             <button
                               className="btn btn-sm btn-outline-danger"

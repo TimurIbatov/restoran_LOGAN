@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { getMockData } from '../utils/api'
+import { restaurantAPI } from '../utils/api'
 import { useToast } from '../contexts/ToastContext'
 import LoadingSpinner from '../components/LoadingSpinner'
 
@@ -26,8 +26,8 @@ const Menu = () => {
   const loadMenu = async () => {
     try {
       setLoading(true)
-      const data = await getMockData('menuItems')
-      setMenuItems(data.menuItems || [])
+      const data = await restaurantAPI.getMenuItems()
+      setMenuItems(data || [])
     } catch (error) {
       console.error('Ошибка загрузки меню:', error)
       showToast('Ошибка', 'Не удалось загрузить меню', 'error')
@@ -96,7 +96,7 @@ const Menu = () => {
 
     // Группируем по категориям
     const groupedItems = filteredItems.reduce((acc, item) => {
-      const category = item.category || 'Прочее'
+      const category = item.category_name || 'Прочее'
       if (!acc[category]) {
         acc[category] = []
       }
@@ -128,6 +128,12 @@ const Menu = () => {
                 <div className="menu-item-price text-primary fw-bold">
                   {item.price.toLocaleString()} сум
                 </div>
+                {item.cooking_time && (
+                  <div className="menu-item-time text-muted small">
+                    <i className="bi bi-clock me-1"></i>
+                    {item.cooking_time} мин
+                  </div>
+                )}
               </div>
             </div>
           ))}
