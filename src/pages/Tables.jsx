@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { restaurantAPI } from '../utils/api'
 import LoadingSpinner from '../components/LoadingSpinner'
@@ -19,26 +18,13 @@ const Tables = () => {
     zone: 'all'
   })
 
-  const { user, isAuthenticated } = useAuth()
   const { showToast } = useToast()
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      showToast('Доступ ограничен', 'Необходимо войти в систему', 'warning')
-      navigate('/login')
-      return
-    }
-
-    if (user?.role === 'admin') {
-      showToast('Доступ ограничен', 'Администраторам недоступен просмотр столиков', 'warning')
-      navigate('/admin')
-      return
-    }
-
     loadTables()
     loadFloorPlan()
-  }, [isAuthenticated, user, navigate])
+  }, [])
 
   useEffect(() => {
     applyFilters()
@@ -284,10 +270,6 @@ const Tables = () => {
         </div>
       </div>
     )
-  }
-
-  if (!isAuthenticated) {
-    return null
   }
 
   return (
