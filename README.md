@@ -89,14 +89,14 @@ python manage.py collectstatic --noinput
 # Установка зависимостей
 npm install
 
-# Запуск в режиме разработки
-npm run dev
+# Настройка переменных окружения
+cp .env.local.example .env.local
+# Отредактируйте .env.local при необходимости
 ```
 
 ### 4. Запуск серверов
 ```bash
 # Терминал 1: Django сервер
-cd restaurant_backend
 python manage.py runserver
 
 # Терминал 2: React сервер
@@ -166,13 +166,16 @@ restaurant-logan/
 │   ├── components/      # React компоненты
 │   ├── pages/          # Страницы
 │   ├── contexts/       # React контексты
-│   └── utils/          # Утилиты
+│   ├── hooks/          # Кастомные хуки
+│   ├── services/       # Сервисы
+│   ├── utils/          # Утилиты
+│   └── config/         # Конфигурация
 └── docs/               # Документация
 ```
 
 ## 🔧 Конфигурация
 
-### Переменные окружения (.env)
+### Переменные окружения Backend (.env)
 ```env
 DEBUG=True
 SECRET_KEY=your-secret-key
@@ -184,17 +187,33 @@ DB_PORT=5432
 REDIS_URL=redis://localhost:6379/0
 ```
 
-### Настройки ресторана
-```python
-RESTAURANT_SETTINGS = {
-    'BOOKING_ADVANCE_DAYS': 30,
-    'MIN_BOOKING_DURATION': 60,
-    'MAX_BOOKING_DURATION': 240,
-    'DEFAULT_BOOKING_DURATION': 120,
-    'BOOKING_INTERVAL': 30,
-    'BOOKING_CANCELLATION_HOURS': 2,
-}
+### Переменные окружения Frontend (.env.local)
+```env
+VITE_API_BASE_URL=http://localhost:8000/api
+VITE_MEDIA_BASE_URL=http://localhost:8000/media
+VITE_STATIC_BASE_URL=http://localhost:8000/static
 ```
+
+## 🌐 Соединение Frontend и Backend
+
+### Прокси настройки (vite.config.js)
+```javascript
+export default defineConfig({
+  server: {
+    proxy: {
+      '/api': 'http://localhost:8000',
+      '/media': 'http://localhost:8000',
+      '/static': 'http://localhost:8000'
+    }
+  }
+})
+```
+
+### API клиент
+- Автоматическое обновление JWT токенов
+- Обработка ошибок и повторные запросы
+- Типизированные эндпоинты
+- Централизованная конфигурация
 
 ## 🚀 Деплой
 
