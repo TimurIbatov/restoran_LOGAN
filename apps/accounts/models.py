@@ -23,6 +23,7 @@ class User(AbstractUser):
     # Дополнительные поля
     date_of_birth = models.DateField(_('Дата рождения'), blank=True, null=True)
     avatar = models.ImageField(_('Аватар'), upload_to='avatars/', blank=True, null=True)
+    address = models.TextField(_('Адрес'), blank=True)
     
     # Настройки уведомлений
     email_notifications = models.BooleanField(_('Email уведомления'), default=True)
@@ -43,6 +44,10 @@ class User(AbstractUser):
     
     def get_full_name(self):
         return f"{self.first_name} {self.last_name}".strip() or self.username
+    
+    @property
+    def full_name(self):
+        return self.get_full_name()
     
     @property
     def is_admin_user(self):

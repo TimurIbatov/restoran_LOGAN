@@ -321,6 +321,11 @@ export const restaurantAPI = {
   },
   deleteTable: (id) => apiClient.delete(`${API_ENDPOINTS.restaurant.tables}${id}/`),
 
+  // Методы для управления зонами
+  createZone: (data) => apiClient.post(API_ENDPOINTS.restaurant.zones, data),
+  updateZone: (id, data) => apiClient.put(`${API_ENDPOINTS.restaurant.zones}${id}/`, data),
+  deleteZone: (id) => apiClient.delete(`${API_ENDPOINTS.restaurant.zones}${id}/`),
+
   // Методы для управления меню
   createMenuItem: (data) => apiClient.post(API_ENDPOINTS.restaurant.menuItems, data),
   updateMenuItem: (id, data) => apiClient.put(`${API_ENDPOINTS.restaurant.menuItems}${id}/`, data),
@@ -347,7 +352,7 @@ export const bookingAPI = {
 // API для аккаунтов
 export const accountAPI = {
   getProfile: () => apiClient.get(API_ENDPOINTS.accounts.profile),
-  updateProfile: (data) => apiClient.put(API_ENDPOINTS.accounts.profile, data),
+  updateProfile: (data) => apiClient.patch(API_ENDPOINTS.accounts.profile, data),
   changePassword: (data) => apiClient.post(API_ENDPOINTS.accounts.changePassword, data),
   getUsers: () => apiClient.get(API_ENDPOINTS.accounts.users),
   verifyEmail: (token) => apiClient.post(API_ENDPOINTS.accounts.verifyEmail, { token }, { includeAuth: false }),

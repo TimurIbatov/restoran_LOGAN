@@ -16,6 +16,37 @@ class UserProfileView(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return self.request.user
 
+class UserListView(generics.ListAPIView):
+    """Список пользователей (только для админов)"""
+    serializer_class = UserSerializer
+    permission_classes = [permissions.IsAdminUser]
+    
+    def get_queryset(self):
+        return User.objects.all().select_related('profile')
+
+@api_view(['GET'])
+@permission_classes([permissions.IsAuthenticated])
+def current_user(request):
+    """Получение текущего пользователя"""
+    serializer = UserSerializer(request.user)
+    return Response(serializer.data)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def change_password(request):
+    """Изменение пароля"""
+    user = request.user
+    current_password = request.data.get('current_password')
+    new_password = request.data.get('new_password')
+    
+    if not user.check_password(current_password):
+        return Response({'error': 'Неверный текущий пароль'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    user.set_password(new_password)
+    user.save()
+    
+    return Response({'message': 'Пароль успешно изменен'})
+
 @api_view(['POST'])
 @permission_classes([permissions.AllowAny])
 def verify_email(request):
