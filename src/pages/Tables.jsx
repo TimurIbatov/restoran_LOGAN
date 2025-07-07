@@ -1,43 +1,44 @@
-import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useToast } from '../contexts/ToastContext'
-import { restaurantAPI } from '../utils/api'
-import LoadingSpinner from '../components/LoadingSpinner'
+"use client"
+
+import { useState, useEffect } from "react"
+import { Link } from "react-router-dom"
+import { restaurantAPI } from "../utils/api"
+import LoadingSpinner from "../components/LoadingSpinner"
+import { useToast } from "../contexts/ToastContext"
 
 const Tables = () => {
   const [tables, setTables] = useState([])
-  const [filteredTables, setFilteredTables] = useState([])
+  const [zones, setZones] = useState([])
+  const [floorPlan, setFloorPlan] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState('grid') // 'grid' или 'plan'
-  const [floorPlanData, setFloorPlanData] = useState(null)
-  const [selectedZone, setSelectedZone] = useState('all')
-  const [filters, setFilters] = useState({
-    date: '',
-    time: '',
-    guests: 2,
-    zone: 'all'
-  })
-
+  const [selectedZone, setSelectedZone] = useState("all")
+  const [viewMode, setViewMode] = useState("grid") // 'grid' или 'floor'
   const { showToast } = useToast()
-  const navigate = useNavigate()
 
   useEffect(() => {
     loadTables()
+    loadZones()
     loadFloorPlan()
   }, [])
 
-  useEffect(() => {
-    applyFilters()
-  }, [tables, filters])
-
   const loadTables = async () => {
     try {
-      setLoading(true)
       const data = await restaurantAPI.getTables()
-      setTables(data || [])
+      setTables(Array.isArray(data) ? data : [])
     } catch (error) {
-      console.error('Ошибка загрузки столиков:', error)
-      showToast('Ошибка', 'Не удалось загрузить столики', 'error')
+      console.error("Ошибка загрузки столиков:", error)
+      
+      setTables(demoTables)
+    }
+  }
+
+  const loadZones = async () => {
+    try {
+      const data = await restaurantAPI.getZones()
+      setZones(Array.isArray(data) ? data : [])
+    } catch (error) {
+      console.error("Ошибка загрузки зон:", error)
+      
     } finally {
       setLoading(false)
     }
@@ -46,471 +47,519 @@ const Tables = () => {
   const loadFloorPlan = async () => {
     try {
       const data = await restaurantAPI.getFloorPlan()
-      setFloorPlanData(data)
+      setFloorPlan(data)
     } catch (error) {
-      console.error('Ошибка загрузки плана зала:', error)
+      console.error("Ошибка загрузки плана зала:", error)
+      setFloorPlan(null)
     }
   }
 
-  const applyFilters = () => {
-    let filtered = tables.filter(table => table.is_active)
-
-    if (filters.guests > 0) {
-      filtered = filtered.filter(table => table.capacity >= filters.guests)
-    }
-
-    if (filters.zone !== 'all') {
-      filtered = filtered.filter(table => table.zone_slug === filters.zone)
-    }
-
-    setFilteredTables(filtered)
-  }
-
-  const handleFilterChange = (e) => {
-    setFilters({
-      ...filters,
-      [e.target.name]: e.target.value
-    })
-  }
-
-  const resetFilters = () => {
-    setFilters({
-      date: '',
-      time: '',
-      guests: 2,
-      zone: 'all'
-    })
-  }
-
-  const selectTable = (tableId) => {
-    localStorage.setItem('selectedTableId', tableId)
-    showToast('Столик выбран', `Переход к бронированию столика #${tableId}`, 'success')
-    navigate(`/booking?table=${tableId}`)
-  }
-
-  const getStatusClass = (status) => {
+  const getStatusColor = (status) => {
     switch (status) {
-      case 'available':
-        return 'status-available'
-      case 'partially':
-        return 'status-partially'
-      case 'booked':
-        return 'status-booked'
+      case "available":
+        return "success"
+      case "occupied":
+        return "danger"
+      case "reserved":
+        return "warning"
+      case "maintenance":
+        return "secondary"
       default:
-        return 'bg-secondary text-white'
+        return "secondary"
     }
   }
 
   const getStatusText = (status) => {
     switch (status) {
-      case 'available':
-        return 'Свободен'
-      case 'partially':
-        return 'Частично занят'
-      case 'booked':
-        return 'Занят'
+      case "available":
+        return "Свободен"
+      case "occupied":
+        return "Занят"
+      case "reserved":
+        return "Забронирован"
+      case "maintenance":
+        return "Обслуживание"
       default:
-        return 'Неизвестно'
+        return "Неизвестно"
     }
   }
 
-  const groupTablesByZone = (tables) => {
-    return tables.reduce((acc, table) => {
-      const zoneKey = table.zone_slug || 'other'
-      if (!acc[zoneKey]) {
-        acc[zoneKey] = {
-          name: table.zone_name || 'Другая зона',
-          slug: zoneKey,
-          tables: []
-        }
-      }
-      acc[zoneKey].tables.push(table)
-      return acc
-    }, {})
+  const filteredTables = selectedZone === "all" ? tables : tables.filter((table) => table.zone_name === selectedZone)
+
+  const handleTableSelect = (tableId) => {
+    localStorage.setItem("selectedTableId", tableId.toString())
+    showToast("Столик выбран", "Перейдите к бронированию", "success")
   }
 
-  const renderGridView = () => {
-    if (filteredTables.length === 0) {
-      return (
-        <div className="col-12 text-center">
-          <div className="alert alert-info">
-            <i className="bi bi-info-circle me-2"></i>
-            Нет подходящих столиков с выбранными параметрами
-          </div>
-        </div>
-      )
-    }
+  const [selectedTable, setSelectedTable] = useState(null)
 
-    const groupedTables = groupTablesByZone(filteredTables)
-
-    return Object.entries(groupedTables).map(([zoneKey, zone]) => (
-      <div key={zoneKey} className="zone-section mb-5">
-        <div className="zone-header">
-          <img
-            src={`https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?ixlib=rb-4.0.3&auto=format&fit=crop&w=1200&q=80`}
-            alt={zone.name}
-            className="zone-image w-100"
-          />
-          <div className="zone-overlay position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center">
-            <h2 className="text-white mb-0">{zone.name}</h2>
-          </div>
-        </div>
-
-        <div className="row">
-          {zone.tables.map(table => (
-            <div key={table.id} className="col-md-4 col-lg-3 mb-4">
-              <div className="card table-card position-relative h-100">
-                <img
-                  src={table.image || 'https://images.unsplash.com/photo-1514933651103-005eec06c04b?ixlib=rb-4.0.3&auto=format&fit=crop&w=600&q=80'}
-                  className="card-img-top"
-                  alt={table.name}
-                />
-                <div className="card-body">
-                  <h5 className="card-title">{table.name}</h5>
-                  <p className="card-text">
-                    <i className="bi bi-people-fill me-1"></i>
-                    Вместимость: {table.capacity} чел.<br />
-                    <i className="bi bi-geo-alt-fill me-1"></i>
-                    Зона: {table.zone_name}
-                  </p>
-                  <button
-                    className="btn btn-primary btn-sm w-100"
-                    onClick={() => selectTable(table.id)}
-                  >
-                    <i className="bi bi-calendar-check me-1"></i>
-                    Забронировать
-                  </button>
-                </div>
-                <div className={`table-status ${getStatusClass(table.current_status)}`}>
-                  {getStatusText(table.current_status)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    ))
-  }
-
-  const renderFloorPlan = () => {
-    if (!floorPlanData) {
-      return <LoadingSpinner message="Загрузка плана зала..." />
+  const getZonePosition = (zoneSlug, index) => {
+    const positions = {
+      main: { x: 50, y: 100, width: 400, height: 200 },
+      vip: { x: 500, y: 100, width: 200, height: 150 },
+      terrace: { x: 150, y: 350, width: 300, height: 180 },
     }
 
     return (
-      <div className="floor-plan-container">
-        <div className="floor-plan-wrapper">
-          {/* Зоны */}
-          {floorPlanData.zones.map(zone => (
-            <div
-              key={zone.id}
-              className={`zone-area ${selectedZone === zone.slug ? 'active' : ''}`}
-              style={{
-                left: `${20 + zone.id * 200}px`,
-                top: `${50 + (zone.id % 2) * 200}px`,
-                width: '180px',
-                height: '150px'
-              }}
-            >
-              <div className="zone-label">{zone.name}</div>
-            </div>
-          ))}
-
-          {/* Столики */}
-          {filteredTables.map(table => (
-            <div
-              key={table.id}
-              className={`table-marker ${table.current_status} ${table.is_vip ? 'vip' : ''}`}
-              style={{
-                left: `${table.position_x || Math.random() * 600}px`,
-                top: `${table.position_y || Math.random() * 400}px`
-              }}
-              onClick={() => selectTable(table.id)}
-              title={`${table.name} - ${table.capacity} мест`}
-            >
-              {table.name}
-            </div>
-          ))}
-        </div>
-
-        {/* Легенда */}
-        <div className="floor-plan-legend">
-          <h6>Статус столиков</h6>
-          <div className="legend-item">
-            <span className="legend-color available"></span>
-            Свободен
-          </div>
-          <div className="legend-item">
-            <span className="legend-color booked"></span>
-            Забронирован
-          </div>
-          <div className="legend-item">
-            <span className="legend-color vip"></span>
-            VIP столик
-          </div>
-        </div>
-
-        {/* Фильтр по зонам */}
-        <div className="zone-filter">
-          <button
-            className={`btn btn-sm ${selectedZone === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
-            onClick={() => setSelectedZone('all')}
-          >
-            Все зоны
-          </button>
-          {floorPlanData.zones.map(zone => (
-            <button
-              key={zone.id}
-              className={`btn btn-sm ${selectedZone === zone.slug ? 'btn-primary' : 'btn-outline-primary'}`}
-              onClick={() => setSelectedZone(zone.slug)}
-            >
-              {zone.name}
-            </button>
-          ))}
-        </div>
-      </div>
+      positions[zoneSlug] || {
+        x: 50 + index * 150,
+        y: 100 + index * 100,
+        width: 300,
+        height: 150,
+      }
     )
+  }
+
+  const getTablePosition = (tableId, zoneName, index) => {
+    const zonePositions = {
+      "Основной зал": [
+        { x: 100, y: 150 },
+        { x: 200, y: 150 },
+        { x: 300, y: 150 },
+        { x: 150, y: 220 },
+        { x: 250, y: 220 },
+      ],
+      "VIP-зона": [
+        { x: 550, y: 150 },
+        { x: 600, y: 200 },
+      ],
+      Терраса: [
+        { x: 200, y: 400 },
+        { x: 300, y: 400 },
+        { x: 400, y: 400 },
+      ],
+    }
+
+    const positions = zonePositions[zoneName] || []
+    const tableIndex = positions.length > 0 ? (tableId - 1) % positions.length : index
+
+    return (
+      positions[tableIndex] || {
+        x: 100 + index * 80,
+        y: 150 + Math.floor(index / 5) * 80,
+      }
+    )
+  }
+
+  const getTableStatusClass = (status) => {
+    switch (status) {
+      case "available":
+        return "bg-success"
+      case "occupied":
+        return "bg-danger"
+      case "reserved":
+        return "bg-warning"
+      default:
+        return "bg-secondary"
+    }
+  }
+
+  const handleTableClick = (table) => {
+    setSelectedTable(table)
   }
 
   return (
     <div>
-      <section className="page-header tables-header">
+      <section className="bg-info text-white py-5">
         <div className="container">
-          <h1 className="display-4">Наши столики</h1>
-          <p className="lead">Выберите идеальный столик для вашего визита</p>
+          <h1 className="display-4">Столики</h1>
+          <p className="lead">Выберите подходящий столик для вашего визита</p>
         </div>
       </section>
 
-      <main className="container">
-        {/* Переключатель вида */}
-        <div className="view-switcher mb-4">
-          <div className="btn-group" role="group">
-            <button
-              type="button"
-              className={`btn ${viewMode === 'grid' ? 'btn-primary' : 'btn-outline-primary'}`}
-              onClick={() => setViewMode('grid')}
-            >
-              <i className="bi bi-grid-3x3 me-1"></i>
-              Список
-            </button>
-            <button
-              type="button"
-              className={`btn ${viewMode === 'plan' ? 'btn-primary' : 'btn-outline-primary'}`}
-              onClick={() => setViewMode('plan')}
-            >
-              <i className="bi bi-diagram-3 me-1"></i>
-              План зала
-            </button>
-          </div>
-        </div>
+      <main className="container my-5">
+        {loading ? (
+          <LoadingSpinner message="Загрузка столиков..." />
+        ) : (
+          <>
+            {/* Фильтры и переключатель вида */}
+            <div className="row mb-4">
+              <div className="col-md-6">
+                <label htmlFor="zoneFilter" className="form-label">
+                  Фильтр по зоне
+                </label>
+                <select
+                  id="zoneFilter"
+                  className="form-select"
+                  value={selectedZone}
+                  onChange={(e) => setSelectedZone(e.target.value)}
+                >
+                  <option value="all">Все зоны</option>
+                  {zones.map((zone) => (
+                    <option key={zone.id} value={zone.name}>
+                      {zone.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Вид отображения</label>
+                <div className="btn-group w-100" role="group">
+                  <button
+                    type="button"
+                    className={`btn ${viewMode === "grid" ? "btn-info" : "btn-outline-info"}`}
+                    onClick={() => setViewMode("grid")}
+                  >
+                    <i className="bi bi-grid-3x3-gap me-1"></i>
+                    Сетка
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn ${viewMode === "floor" ? "btn-info" : "btn-outline-info"}`}
+                    onClick={() => setViewMode("floor")}
+                  >
+                    <i className="bi bi-diagram-3 me-1"></i>
+                    План зала
+                  </button>
+                </div>
+              </div>
+            </div>
 
-        {/* Фильтры */}
-        <div className="filters">
-          <div className="row">
-            <div className="col-md-3 mb-3 mb-md-0">
-              <label htmlFor="dateFilter" className="form-label">Дата</label>
-              <input
-                type="date"
-                className="form-control"
-                id="dateFilter"
-                name="date"
-                value={filters.date}
-                onChange={handleFilterChange}
-              />
+            {/* Легенда статусов */}
+            <div className="row mb-4">
+              <div className="col-12">
+                <div className="card">
+                  <div className="card-body">
+                    <h6 className="card-title">Статусы столиков:</h6>
+                    <div className="d-flex flex-wrap gap-3">
+                      <span className="badge bg-success">Свободен</span>
+                      <span className="badge bg-warning text-dark">Забронирован</span>
+                      <span className="badge bg-danger">Занят</span>
+                      <span className="badge bg-secondary">Обслуживание</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div className="col-md-3 mb-3 mb-md-0">
-              <label htmlFor="timeFilter" className="form-label">Время</label>
-              <input
-                type="time"
-                className="form-control"
-                id="timeFilter"
-                name="time"
-                value={filters.time}
-                onChange={handleFilterChange}
-              />
-            </div>
-            <div className="col-md-3 mb-3 mb-md-0">
-              <label htmlFor="guestsFilter" className="form-label">
-                Количество гостей
-              </label>
-              <input
-                type="number"
-                className="form-control"
-                id="guestsFilter"
-                name="guests"
-                min="1"
-                value={filters.guests}
-                onChange={handleFilterChange}
-              />
-            </div>
-            <div className="col-md-3 mb-3 mb-md-0">
-              <label htmlFor="zoneFilter" className="form-label">Зона</label>
-              <select
-                className="form-select"
-                id="zoneFilter"
-                name="zone"
-                value={filters.zone}
-                onChange={handleFilterChange}
-              >
-                <option value="all">Все зоны</option>
-                <option value="main">Основной зал</option>
-                <option value="terrace">Терраса</option>
-                <option value="vip">VIP-зона</option>
-              </select>
-            </div>
-          </div>
-          <div className="row mt-3">
-            <div className="col-12 text-end">
-              <button className="btn btn-outline-secondary" onClick={resetFilters}>
-                Сбросить
-              </button>
-            </div>
-          </div>
-        </div>
 
-        {/* Контент */}
-        <div className="tables-content">
-          {loading ? (
-            <LoadingSpinner message="Загрузка столиков..." />
-          ) : viewMode === 'grid' ? (
-            <div className="row">
-              {renderGridView()}
+            {/* Отображение столиков */}
+            {viewMode === "grid" ? (
+              <div className="row">
+                {filteredTables.length > 0 ? (
+                  filteredTables.map((table) => (
+                    <div key={table.id} className="col-lg-4 col-md-6 mb-4">
+                      <div className={`card h-100 ${table.is_vip ? "border-warning" : ""}`}>
+                        {table.is_vip && (
+                          <div className="card-header bg-warning text-dark">
+                            <i className="bi bi-star-fill me-1"></i>
+                            VIP столик
+                          </div>
+                        )}
+                        <div className="card-body">
+                          <div className="d-flex justify-content-between align-items-start mb-2">
+                            <h5 className="card-title">{table.name}</h5>
+                            <span className={`badge bg-${getStatusColor(table.current_status)}`}>
+                              {getStatusText(table.current_status)}
+                            </span>
+                          </div>
+
+                          <div className="mb-3">
+                            <p className="card-text mb-1">
+                              <i className="bi bi-people-fill me-2"></i>
+                              Вместимость: <strong>{table.capacity} человек</strong>
+                            </p>
+                            <p className="card-text mb-1">
+                              <i className="bi bi-geo-alt-fill me-2"></i>
+                              Зона: <strong>{table.zone_name}</strong>
+                            </p>
+                            {table.price_per_hour > 0 && (
+                              <p className="card-text mb-1">
+                                <i className="bi bi-credit-card me-2"></i>
+                                Цена: <strong>{table.price_per_hour.toLocaleString()} сум/час</strong>
+                              </p>
+                            )}
+                            {table.deposit > 0 && (
+                              <p className="card-text mb-1">
+                                <i className="bi bi-shield-check me-2"></i>
+                                Депозит: <strong>{table.deposit.toLocaleString()} сум</strong>
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="mt-auto">
+                            {table.current_status === "available" ? (
+                              <div className="d-grid gap-2">
+                                <Link
+                                  to={`/booking?table=${table.id}`}
+                                  className="btn btn-success"
+                                  onClick={() => handleTableSelect(table.id)}
+                                >
+                                  <i className="bi bi-calendar-check me-1"></i>
+                                  Забронировать
+                                </Link>
+                              </div>
+                            ) : (
+                              <button className="btn btn-secondary w-100" disabled>
+                                <i className="bi bi-x-circle me-1"></i>
+                                Недоступен
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="col-12">
+                    <div className="text-center py-5">
+                      <i className="bi bi-table display-1 text-muted"></i>
+                      <h3 className="mt-3">Столики не найдены</h3>
+                      <p className="text-muted">В выбранной зоне нет доступных столиков</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* План зала */
+              <div className="row">
+                <div className="col-12">
+                  <div className="card">
+                    <div className="card-header">
+                      <h5 className="mb-0">
+                        <i className="bi bi-diagram-3 me-2"></i>
+                        План зала
+                      </h5>
+                    </div>
+                    <div className="card-body">
+                      <div
+                        className="floor-plan-container position-relative"
+                        style={{
+                          height: "600px",
+                          background: "linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
+                          borderRadius: "15px",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {/* Зоны */}
+                        {zones.map((zone, index) => {
+                          const zonePosition = getZonePosition(zone.slug, index)
+                          return (
+                            <div
+                              key={zone.id}
+                              className="position-absolute border border-2 border-primary rounded"
+                              style={{
+                                left: zonePosition.x + "px",
+                                top: zonePosition.y + "px",
+                                width: zonePosition.width + "px",
+                                height: zonePosition.height + "px",
+                                backgroundColor: "rgba(13, 110, 253, 0.1)",
+                                borderStyle: "dashed",
+                              }}
+                            >
+                              <div
+                                className="position-absolute bg-primary text-white px-3 py-1 rounded-pill"
+                                style={{ top: "-15px", left: "10px", fontSize: "0.8rem", fontWeight: "bold" }}
+                              >
+                                {zone.name}
+                              </div>
+                            </div>
+                          )
+                        })}
+
+                        {/* Столики */}
+                        {filteredTables.map((table, index) => {
+                          const tablePosition = getTablePosition(table.id, table.zone_name, index)
+                          return (
+                            <div
+                              key={table.id}
+                              className={`position-absolute rounded-circle d-flex align-items-center justify-content-center text-white fw-bold ${getTableStatusClass(table.current_status)} ${table.is_vip ? "border border-warning border-3" : "border border-white border-2"}`}
+                              style={{
+                                left: tablePosition.x + "px",
+                                top: tablePosition.y + "px",
+                                width: "60px",
+                                height: "60px",
+                                cursor: "pointer",
+                                fontSize: "0.8rem",
+                                boxShadow: "0 4px 15px rgba(0,0,0,0.2)",
+                                transition: "all 0.3s ease",
+                              }}
+                              onClick={() => handleTableClick(table)}
+                              onMouseEnter={(e) => {
+                                e.target.style.transform = "scale(1.1)"
+                                e.target.style.zIndex = "10"
+                              }}
+                              onMouseLeave={(e) => {
+                                e.target.style.transform = "scale(1)"
+                                e.target.style.zIndex = "1"
+                              }}
+                              title={`${table.name} (${table.capacity} мест) - ${getStatusText(table.current_status)}`}
+                            >
+                              {table.name.replace("Столик №", "").replace("VIP №", "V")}
+                            </div>
+                          )
+                        })}
+
+                        {/* Легенда */}
+                        <div
+                          className="position-absolute bg-white rounded p-3 shadow"
+                          style={{ top: "20px", right: "20px" }}
+                        >
+                          <h6 className="mb-3">Статус столиков</h6>
+                          <div className="d-flex flex-column gap-2">
+                            <div className="d-flex align-items-center">
+                              <div
+                                className="rounded-circle me-2"
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  background: "linear-gradient(135deg, #198754, #157347)",
+                                }}
+                              ></div>
+                              <small>Свободен</small>
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <div
+                                className="rounded-circle me-2"
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  background: "linear-gradient(135deg, #ffc107, #ffca2c)",
+                                }}
+                              ></div>
+                              <small>Забронирован</small>
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <div
+                                className="rounded-circle me-2"
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  background: "linear-gradient(135deg, #dc3545, #bb2d3b)",
+                                }}
+                              ></div>
+                              <small>Занят</small>
+                            </div>
+                            <div className="d-flex align-items-center">
+                              <div
+                                className="rounded-circle border border-warning border-2 me-2"
+                                style={{
+                                  width: "20px",
+                                  height: "20px",
+                                  background: "linear-gradient(135deg, #6f42c1, #59359a)",
+                                }}
+                              ></div>
+                              <small>VIP столик</small>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Информация о выбранном столике */}
+                        {selectedTable && (
+                          <div
+                            className="position-absolute bg-white rounded p-3 shadow"
+                            style={{
+                              bottom: "20px",
+                              left: "20px",
+                              minWidth: "250px",
+                              zIndex: 1000,
+                            }}
+                          >
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                              <h6 className="mb-0">{selectedTable.name}</h6>
+                              <button
+                                type="button"
+                                className="btn-close btn-sm"
+                                onClick={() => setSelectedTable(null)}
+                              ></button>
+                            </div>
+                            <div className="small">
+                              <div className="row">
+                                <div className="col-6">
+                                  <strong>Зона:</strong>
+                                  <br />
+                                  {selectedTable.zone_name}
+                                </div>
+                                <div className="col-6">
+                                  <strong>Вместимость:</strong>
+                                  <br />
+                                  {selectedTable.capacity} человек
+                                </div>
+                              </div>
+                              <div className="row mt-2">
+                                <div className="col-6">
+                                  <strong>Статус:</strong>
+                                  <br />
+                                  <span className={`badge bg-${getStatusColor(selectedTable.current_status)}`}>
+                                    {getStatusText(selectedTable.current_status)}
+                                  </span>
+                                </div>
+                                <div className="col-6">
+                                  <strong>Тип:</strong>
+                                  <br />
+                                  {selectedTable.is_vip ? "VIP столик" : "Обычный"}
+                                </div>
+                              </div>
+                              {selectedTable.price_per_hour > 0 && (
+                                <div className="mt-2">
+                                  <strong>Цена:</strong> {selectedTable.price_per_hour.toLocaleString()} сум/час
+                                </div>
+                              )}
+                            </div>
+                            {selectedTable.current_status === "available" && (
+                              <div className="mt-3">
+                                <Link
+                                  to={`/booking?table=${selectedTable.id}`}
+                                  className="btn btn-success btn-sm w-100"
+                                  onClick={() => handleTableSelect(selectedTable.id)}
+                                >
+                                  <i className="bi bi-calendar-check me-1"></i>
+                                  Забронировать
+                                </Link>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Информационная панель */}
+            <div className="row mt-5">
+              <div className="col-12">
+                <div className="card bg-light">
+                  <div className="card-body">
+                    <h5 className="card-title">
+                      <i className="bi bi-info-circle me-2"></i>
+                      Информация о бронировании
+                    </h5>
+                    <div className="row">
+                      <div className="col-md-6">
+                        <ul className="list-unstyled">
+                          <li>
+                            <i className="bi bi-check text-success me-2"></i>Бронирование бесплатно
+                          </li>
+                          <li>
+                            <i className="bi bi-check text-success me-2"></i>Подтверждение в течение 15 минут
+                          </li>
+                          <li>
+                            <i className="bi bi-check text-success me-2"></i>Отмена за 2 часа до визита
+                          </li>
+                        </ul>
+                      </div>
+                      <div className="col-md-6">
+                        <ul className="list-unstyled">
+                          <li>
+                            <i className="bi bi-clock me-2"></i>Время работы: 10:00 - 23:00
+                          </li>
+                          <li>
+                            <i className="bi bi-telephone me-2"></i>Телефон: +998 90 123 45 67
+                          </li>
+                          <li>
+                            <i className="bi bi-envelope me-2"></i>Email: info@restaurant.uz
+                          </li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : (
-            renderFloorPlan()
-          )}
-        </div>
+          </>
+        )}
       </main>
-
-      <style jsx>{`
-        .floor-plan-container {
-          position: relative;
-          width: 100%;
-          height: 600px;
-          background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-          border-radius: 15px;
-          overflow: hidden;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-          margin-bottom: 2rem;
-        }
-
-        .floor-plan-wrapper {
-          position: relative;
-          width: 100%;
-          height: 100%;
-        }
-
-        .zone-area {
-          position: absolute;
-          border: 2px dashed #667eea;
-          border-radius: 10px;
-          background: rgba(102, 126, 234, 0.1);
-          transition: all 0.3s ease;
-        }
-
-        .zone-area.active {
-          background: rgba(102, 126, 234, 0.2);
-          border-color: #667eea;
-        }
-
-        .zone-label {
-          position: absolute;
-          top: -15px;
-          left: 10px;
-          background: #667eea;
-          color: white;
-          padding: 5px 15px;
-          border-radius: 15px;
-          font-size: 0.8em;
-          font-weight: bold;
-        }
-
-        .table-marker {
-          position: absolute;
-          width: 50px;
-          height: 50px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: bold;
-          font-size: 0.7em;
-          cursor: pointer;
-          transition: all 0.3s ease;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-          border: 2px solid white;
-          color: white;
-        }
-
-        .table-marker:hover {
-          transform: scale(1.2);
-          z-index: 10;
-        }
-
-        .table-marker.available {
-          background: linear-gradient(135deg, #2ecc71, #27ae60);
-        }
-
-        .table-marker.booked {
-          background: linear-gradient(135deg, #e74c3c, #c0392b);
-        }
-
-        .table-marker.vip {
-          background: linear-gradient(135deg, #9b59b6, #8e44ad);
-          border-color: gold;
-        }
-
-        .floor-plan-legend {
-          position: absolute;
-          top: 20px;
-          right: 20px;
-          background: white;
-          border-radius: 10px;
-          padding: 15px;
-          box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-        }
-
-        .legend-item {
-          display: flex;
-          align-items: center;
-          margin-bottom: 8px;
-          font-size: 0.9em;
-        }
-
-        .legend-color {
-          width: 16px;
-          height: 16px;
-          border-radius: 50%;
-          margin-right: 8px;
-        }
-
-        .legend-color.available {
-          background: linear-gradient(135deg, #2ecc71, #27ae60);
-        }
-
-        .legend-color.booked {
-          background: linear-gradient(135deg, #e74c3c, #c0392b);
-        }
-
-        .legend-color.vip {
-          background: linear-gradient(135deg, #9b59b6, #8e44ad);
-          border: 2px solid gold;
-        }
-
-        .zone-filter {
-          position: absolute;
-          bottom: 20px;
-          left: 20px;
-          display: flex;
-          gap: 5px;
-          flex-wrap: wrap;
-        }
-
-        .view-switcher {
-          display: flex;
-          justify-content: center;
-        }
-      `}</style>
     </div>
   )
 }

@@ -1,0 +1,17 @@
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+main {
+  min-height: 70vh; /* Минимальная высота для основного контента */
+}
+
+header {
+  z-index: 10; /* Убедитесь, что шапка выше других элементов */
+}
+
+footer {
+  width: 100%; /* Полная ширина футера */
+}

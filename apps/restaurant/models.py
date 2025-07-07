@@ -36,7 +36,7 @@ class Table(models.Model):
     min_capacity = models.PositiveIntegerField(_('Минимальная вместимость'), default=1)
     description = models.TextField(_('Описание'), blank=True)
     image = models.ImageField(_('Изображение'), upload_to='tables/', blank=True, null=True)
-    price_per_hour = models.DecimalField(_('Цена за час'), max_digits=8, decimal_places=2, default=0)
+    price_per_hour = models.DecimalField(_('Цена за столик'), max_digits=8, decimal_places=2, default=0)
     deposit = models.DecimalField(_('Депозит'), max_digits=8, decimal_places=2, default=0)
     is_active = models.BooleanField(_('Активен'), default=True)
     is_vip = models.BooleanField(_('VIP столик'), default=False)
@@ -54,6 +54,12 @@ class Table(models.Model):
     
     def __str__(self):
         return f"{self.zone.name} - {self.name}"
+    
+    def save(self, *args, **kwargs):
+        # Автоматически устанавливаем депозит как 50% от цены столика
+        if self.price_per_hour and not self.deposit:
+            self.deposit = self.price_per_hour / 2
+        super().save(*args, **kwargs)
     
     @property
     def current_status(self):

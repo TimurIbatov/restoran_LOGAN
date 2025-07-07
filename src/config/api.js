@@ -1,82 +1,67 @@
 // Конфигурация API
-const isDevelopment = import.meta.env.DEV
-const isProduction = import.meta.env.PROD
-
-// Базовые URL для разных окружений
 export const API_CONFIG = {
   development: {
-    baseURL: 'http://localhost:8000/api',
-    mediaURL: 'http://localhost:8000/media',
-    staticURL: 'http://localhost:8000/static'
+    baseURL: "http://localhost:8000",
   },
   production: {
-    baseURL: '/api',
-    mediaURL: '/media', 
-    staticURL: '/static'
-  }
+    baseURL: "https://your-production-domain.com",
+  },
 }
 
 // Текущая конфигурация
-export const currentConfig = isDevelopment ? API_CONFIG.development : API_CONFIG.production
+export const currentConfig = API_CONFIG[import.meta.env.MODE] || API_CONFIG.development
 
 // Эндпоинты API
 export const API_ENDPOINTS = {
-  // Аутентификация
   auth: {
-    login: '/auth/jwt/create/',
-    refresh: '/auth/jwt/refresh/',
-    register: '/auth/users/',
-    logout: '/auth/logout/',
-    verify: '/auth/jwt/verify/'
+    login: "/api/auth/jwt/create/",
+    refresh: "/api/auth/jwt/refresh/",
+    register: "/api/auth/users/",
+    verify: "/api/auth/jwt/verify/",
   },
-  
-  // Аккаунты
   accounts: {
-    profile: '/accounts/profile/',
-    current: '/accounts/current/',
-    changePassword: '/accounts/change-password/',
-    users: '/accounts/users/'
+    current: "/api/auth/users/me/",
+    profile: "/api/accounts/profile/",
+    changePassword: "/api/accounts/change-password/",
+    users: "/api/accounts/users/",
+    verifyEmail: "/api/accounts/verify-email/",
+    resendEmailVerification: "/api/accounts/resend-email-verification/",
   },
-  
-  // Ресторан
   restaurant: {
-    zones: '/restaurant/zones/',
-    tables: '/restaurant/tables/',
-    menuCategories: '/restaurant/menu/categories/',
-    menuItems: '/restaurant/menu/items/',
-    settings: '/restaurant/settings/',
-    floorPlan: '/restaurant/floor-plan/',
-    dashboardStats: '/restaurant/dashboard-stats/'
+    zones: "/api/restaurant/zones/",
+    tables: "/api/restaurant/tables/",
+    menuCategories: "/api/restaurant/menu/categories/",
+    menuItems: "/api/restaurant/menu/items/",
+    settings: "/api/restaurant/settings/",
+    floorPlan: "/api/restaurant/floor-plan/",
+    dashboardStats: "/api/restaurant/dashboard-stats/",
   },
-  
-  // Бронирования
   bookings: {
-    list: '/bookings/',
-    create: '/bookings/',
-    detail: (id) => `/bookings/${id}/`,
-    availableSlots: '/bookings/available-slots/',
-    cancel: (id) => `/bookings/${id}/cancel/`,
-    confirm: (id) => `/bookings/${id}/confirm/`,
-    statistics: '/bookings/statistics/'
+    list: "/api/bookings/",
+    create: "/api/bookings/",
+    detail: (id) => `/api/bookings/${id}/`,
+    availableSlots: "/api/bookings/available-slots/",
+    cancel: (id) => `/api/bookings/${id}/cancel/`,
+    confirm: (id) => `/api/bookings/${id}/confirm/`,
+    statistics: "/api/bookings/statistics/",
+    confirmEmail: "/api/bookings/confirm-email/",
+    createPayment: (bookingId) => `/api/bookings/${bookingId}/payment/`,
   },
-  
-  // Отзывы
   reviews: {
-    list: '/reviews/',
-    create: '/reviews/',
-    detail: (id) => `/reviews/${id}/`
-  }
+    list: "/api/reviews/",
+    create: "/api/reviews/",
+    detail: (id) => `/api/reviews/${id}/`,
+  },
 }
 
 // Заголовки по умолчанию
 export const DEFAULT_HEADERS = {
-  'Content-Type': 'application/json',
-  'Accept': 'application/json'
+  "Content-Type": "application/json",
+  Accept: "application/json",
 }
 
-// Настройки запросов
+// Конфигурация запросов
 export const REQUEST_CONFIG = {
-  timeout: 10000, // 10 секунд
-  retries: 3,
-  retryDelay: 1000 // 1 секунда
+  timeout: 30000, // 30 секунд
+  retries: 1, // Количество повторных попыток
 }

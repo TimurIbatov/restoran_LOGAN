@@ -1,8 +1,8 @@
-from rest_framework import generics, permissions
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 from django.db.models import Count, Sum
 from django.utils import timezone
 from datetime import timedelta
@@ -31,6 +31,82 @@ class TableListView(generics.ListAPIView):
     ordering_fields = ['name', 'capacity', 'price_per_hour']
     ordering = ['zone', 'name']
 
+class TableDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Детали, обновление и удаление столика"""
+    
+    queryset = Table.objects.select_related('zone')
+    serializer_class = TableSerializer
+    permission_classes = [permissions.IsAdminUser]
+    lookup_field = 'id'
+
+    def update(self, request, *args, **kwargs):
+        """Обновление столика"""
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            
+            # Обрабатываем FormData
+            data = {}
+            for key, value in request.data.items():
+                if key == 'zone':
+                    # Преобразуем zone в объект
+                    try:
+                        zone_id = int(value)
+                        zone = Zone.objects.get(id=zone_id)
+                        data[key] = zone
+                    except (ValueError, Zone.DoesNotExist):
+                        return Response(
+                            {'error': f'Зона с ID {value} не найдена'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                elif key in ['capacity', 'min_capacity']:
+                    try:
+                        data[key] = int(value)
+                    except ValueError:
+                        return Response(
+                            {'error': f'Некорректное значение для {key}'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                elif key in ['price_per_hour', 'deposit']:
+                    try:
+                        data[key] = float(value)
+                    except ValueError:
+                        return Response(
+                            {'error': f'Некорректное значение для {key}'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                elif key in ['position_x', 'position_y']:
+                    try:
+                        data[key] = float(value)
+                    except ValueError:
+                        data[key] = 0.0
+                elif key in ['is_active', 'is_vip']:
+                    data[key] = value.lower() in ['true', '1', 'on']
+                elif key == 'features':
+                    # Обрабатываем features как JSON
+                    if isinstance(value, str):
+                        try:
+                            import json
+                            data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            data[key] = []
+                    else:
+                        data[key] = value
+                else:
+                    data[key] = value
+            
+            serializer = self.get_serializer(instance, data=data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка обновления столика: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 class MenuCategoryListView(generics.ListAPIView):
     """Список категорий меню"""
     
@@ -51,6 +127,77 @@ class MenuItemListView(generics.ListAPIView):
     search_fields = ['name', 'description', 'ingredients']
     ordering_fields = ['name', 'price', 'cooking_time']
     ordering = ['category', 'sort_order', 'name']
+
+class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Детали, обновление и удаление блюда"""
+    
+    queryset = MenuItem.objects.select_related('category')
+    serializer_class = MenuItemSerializer
+    permission_classes = [permissions.IsAdminUser]
+    lookup_field = 'id'
+
+    def update(self, request, *args, **kwargs):
+        """Обновление блюда"""
+        try:
+            partial = kwargs.pop('partial', False)
+            instance = self.get_object()
+            
+            # Обрабатываем FormData
+            data = {}
+            for key, value in request.data.items():
+                if key == 'category':
+                    # Преобразуем category в объект
+                    try:
+                        category_id = int(value)
+                        category = MenuCategory.objects.get(id=category_id)
+                        data[key] = category
+                    except (ValueError, MenuCategory.DoesNotExist):
+                        return Response(
+                            {'error': f'Категория с ID {value} не найдена'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                elif key in ['price']:
+                    try:
+                        data[key] = float(value)
+                    except ValueError:
+                        return Response(
+                            {'error': f'Некорректное значение для {key}'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                elif key in ['weight', 'calories', 'cooking_time', 'sort_order']:
+                    try:
+                        data[key] = int(value) if value else None
+                    except ValueError:
+                        return Response(
+                            {'error': f'Некорректное значение для {key}'}, 
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                elif key in ['is_available', 'is_special', 'is_vegetarian', 'is_vegan', 'is_gluten_free']:
+                    data[key] = value.lower() in ['true', '1', 'on']
+                elif key == 'allergens':
+                    # Обрабатываем allergens как JSON
+                    if isinstance(value, str):
+                        try:
+                            import json
+                            data[key] = json.loads(value)
+                        except json.JSONDecodeError:
+                            data[key] = []
+                    else:
+                        data[key] = value
+                else:
+                    data[key] = value
+            
+            serializer = self.get_serializer(instance, data=data, partial=partial)
+            serializer.is_valid(raise_exception=True)
+            self.perform_update(serializer)
+            
+            return Response(serializer.data)
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Ошибка обновления блюда: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class RestaurantSettingsView(generics.RetrieveAPIView):
     """Настройки ресторана"""

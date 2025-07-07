@@ -1,52 +1,76 @@
 from rest_framework import serializers
+from django.contrib.auth import get_user_model
 from django.utils import timezone
 from datetime import timedelta
-from .models import Booking, BookingMenuItem
+from .models import Booking, BookingMenuItem, BookingHistory, Payment
 from apps.restaurant.models import Table, MenuItem, RestaurantSettings
 from apps.restaurant.serializers import TableSerializer, MenuItemSerializer
 
+User = get_user_model()
+
 class BookingMenuItemSerializer(serializers.ModelSerializer):
     """Сериализатор для предзаказанных блюд"""
-    
     menu_item_details = MenuItemSerializer(source='menu_item', read_only=True)
     total_price = serializers.DecimalField(max_digits=8, decimal_places=2, read_only=True)
     
     class Meta:
         model = BookingMenuItem
-        fields = ['id', 'menu_item', 'menu_item_details', 'quantity', 'price', 'total_price', 'notes']
-        read_only_fields = ['price']
+        fields = ['id', 'menu_item', 'menu_item_details', 'quantity', 'price_per_item', 'total_price', 'notes']
+        read_only_fields = ['price_per_item']
+
+class BookingHistorySerializer(serializers.ModelSerializer):
+    """Сериализатор для истории бронирований"""
+    changed_by_name = serializers.CharField(source='changed_by.get_full_name', read_only=True)
+    
+    class Meta:
+        model = BookingHistory
+        fields = ['id', 'action', 'old_status', 'new_status', 'changed_by_name', 'comment', 'created_at']
+
+class PaymentSerializer(serializers.ModelSerializer):
+    """Сериализатор для платежей"""
+    
+    class Meta:
+        model = Payment
+        fields = ['id', 'payment_id', 'amount', 'method', 'status', 'created_at', 'completed_at']
 
 class BookingSerializer(serializers.ModelSerializer):
     """Сериализатор для бронирований"""
-    
     table_details = TableSerializer(source='table', read_only=True)
     menu_items = BookingMenuItemSerializer(many=True, read_only=True)
+    payments = PaymentSerializer(many=True, read_only=True)
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     can_be_cancelled = serializers.BooleanField(read_only=True)
     is_active = serializers.BooleanField(read_only=True)
+    remaining_amount = serializers.DecimalField(max_digits=8, decimal_places=2, read_only=True)
     
     class Meta:
         model = Booking
         fields = [
-            'id', 'user', 'user_name', 'table', 'table_details', 'date', 'start_time', 'end_time',
-            'duration', 'guests_count', 'status', 'comment', 'special_requests',
-            'contact_name', 'contact_phone', 'contact_email', 'deposit_amount', 'total_amount',
-            'is_deposit_paid', 'created_at', 'updated_at', 'menu_items', 'can_be_cancelled', 'is_active'
+            'id', 'booking_number', 'user', 'user_name', 'table', 'table_details', 'date', 'start_time', 'end_time',
+            'duration', 'guests_count', 'status', 'payment_status', 'comment', 'special_requests',
+            'contact_name', 'contact_phone', 'contact_email', 'table_price', 'deposit_amount', 'total_amount',
+            'remaining_amount', 'email_confirmed', 'created_at', 'updated_at', 'menu_items', 'payments',
+            'can_be_cancelled', 'is_active'
         ]
         read_only_fields = [
-            'id', 'user', 'duration', 'deposit_amount', 'total_amount', 'created_at', 'updated_at'
+            'id', 'booking_number', 'user', 'duration', 'table_price', 'deposit_amount', 'total_amount',
+            'remaining_amount', 'email_confirmed', 'created_at', 'updated_at'
         ]
 
 class BookingCreateSerializer(serializers.ModelSerializer):
     """Сериализатор для создания бронирования"""
     
-    menu_items = BookingMenuItemSerializer(many=True, required=False)
+    selected_menu_items = serializers.ListField(
+        child=serializers.DictField(), 
+        required=False,
+        allow_empty=True
+    )
     
     class Meta:
         model = Booking
         fields = [
             'table', 'start_time', 'end_time', 'guests_count', 'comment', 'special_requests',
-            'contact_name', 'contact_phone', 'contact_email', 'menu_items'
+            'contact_name', 'contact_phone', 'contact_email', 'selected_menu_items'
         ]
     
     def validate(self, data):
@@ -109,7 +133,7 @@ class BookingCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Создание бронирования"""
-        menu_items_data = validated_data.pop('menu_items', [])
+        selected_menu_items = validated_data.pop('selected_menu_items', [])
         
         # Устанавливаем пользователя
         validated_data['user'] = self.context['request'].user
@@ -118,8 +142,17 @@ class BookingCreateSerializer(serializers.ModelSerializer):
         booking = Booking.objects.create(**validated_data)
         
         # Добавляем предзаказанные блюда
-        for item_data in menu_items_data:
-            BookingMenuItem.objects.create(booking=booking, **item_data)
+        for item_data in selected_menu_items:
+            BookingMenuItem.objects.create(
+                booking=booking,
+                menu_item_id=item_data['menu_item_id'],
+                quantity=item_data['quantity'],
+                notes=item_data.get('notes', '')
+            )
+        
+        # Отправляем email подтверждение
+        from .tasks import send_booking_confirmation_email
+        send_booking_confirmation_email.delay(booking.id)
         
         return booking
 
@@ -128,7 +161,7 @@ class AvailableTimeSlotsSerializer(serializers.Serializer):
     
     date = serializers.DateField()
     table_id = serializers.IntegerField()
-    duration = serializers.IntegerField(required=False)
+    duration = serializers.IntegerField(required=False, default=120)
     
     def validate_date(self, value):
         if value < timezone.now().date():
@@ -152,3 +185,14 @@ class AvailableTimeSlotsSerializer(serializers.Serializer):
             return value
         except Table.DoesNotExist:
             raise serializers.ValidationError('Столик не найден или неактивен')
+
+class EmailConfirmationSerializer(serializers.Serializer):
+    """Сериализатор для подтверждения email"""
+    token = serializers.UUIDField()
+    
+    def validate_token(self, value):
+        try:
+            booking = Booking.objects.get(email_confirmation_token=value, email_confirmed=False)
+            return value
+        except Booking.DoesNotExist:
+            raise serializers.ValidationError('Неверный или уже использованный токен')

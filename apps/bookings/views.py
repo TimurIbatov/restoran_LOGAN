@@ -1,14 +1,14 @@
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from datetime import datetime, timedelta, time
-from django.db.models import Q
-from .models import Booking
+from datetime import datetime, timedelta
+from .models import Booking, BookingMenuItem, Payment
 from .serializers import (
-    BookingSerializer, BookingCreateSerializer, AvailableTimeSlotsSerializer
+    BookingSerializer, BookingCreateSerializer, AvailableTimeSlotsSerializer,
+    EmailConfirmationSerializer
 )
-from apps.restaurant.models import Table, RestaurantSettings
 
 class BookingListCreateView(generics.ListCreateAPIView):
     """Список и создание бронирований"""
@@ -22,9 +22,9 @@ class BookingListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         user = self.request.user
-        if user.is_admin_user:
-            return Booking.objects.all().select_related('user', 'table', 'table__zone').prefetch_related('menu_items')
-        return Booking.objects.filter(user=user).select_related('table', 'table__zone').prefetch_related('menu_items')
+        if user.is_staff:
+            return Booking.objects.all().select_related('user', 'table').prefetch_related('menu_items', 'payments')
+        return Booking.objects.filter(user=user).select_related('table').prefetch_related('menu_items', 'payments')
 
 class BookingDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Детали, обновление и удаление бронирования"""
@@ -34,154 +34,201 @@ class BookingDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         user = self.request.user
-        if user.is_admin_user:
-            return Booking.objects.all().select_related('user', 'table', 'table__zone').prefetch_related('menu_items')
-        return Booking.objects.filter(user=user).select_related('table', 'table__zone').prefetch_related('menu_items')
+        if user.is_staff:
+            return Booking.objects.all()
+        return Booking.objects.filter(user=user)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def confirm_booking(request, pk):
+    """Подтверждение бронирования"""
+    booking = get_object_or_404(Booking, pk=pk)
+    
+    if not request.user.is_staff:
+        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if booking.status == 'pending':
+        booking.confirm()
+        
+        # Отправляем SMS/Email уведомление
+        from .tasks import send_booking_status_notification
+        send_booking_status_notification.delay(booking.id, 'confirmed')
+        
+        return Response({'message': 'Бронирование подтверждено'})
+    
+    return Response({'error': 'Бронирование нельзя подтвердить'}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def cancel_booking(request, pk):
+    """Отмена бронирования"""
+    booking = get_object_or_404(Booking, pk=pk)
+    
+    # Проверяем права доступа
+    if booking.user != request.user and not request.user.is_staff:
+        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if booking.can_be_cancelled:
+        reason = request.data.get('reason', 'Отменено пользователем')
+        booking.cancel(reason)
+        
+        # Отправляем SMS/Email уведомление
+        from .tasks import send_booking_status_notification
+        send_booking_status_notification.delay(booking.id, 'cancelled')
+        
+        return Response({'message': 'Бронирование отменено'})
+    
+    return Response({'error': 'Бронирование нельзя отменить'}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def confirm_email(request):
+    """Подтверждение email по токену"""
+    serializer = EmailConfirmationSerializer(data=request.data)
+    if serializer.is_valid():
+        token = serializer.validated_data['token']
+        booking = get_object_or_404(Booking, email_confirmation_token=token, email_confirmed=False)
+        booking.confirm_email()
+        
+        return Response({
+            'message': 'Email успешно подтвержден',
+            'booking_number': booking.booking_number,
+            'payment_url': f'/payment/{booking.id}/'
+        })
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.AllowAny])
 def available_time_slots(request):
-    """Получение доступных временных слотов для бронирования"""
-    
-    serializer = AvailableTimeSlotsSerializer(data=request.query_params)
+    """Получение доступных временных слотов"""
+    serializer = AvailableTimeSlotsSerializer(data=request.GET)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
     date = serializer.validated_data['date']
     table_id = serializer.validated_data['table_id']
-    duration = serializer.validated_data.get('duration')
+    duration = serializer.validated_data.get('duration', 120)
     
     try:
+        from apps.restaurant.models import Table, RestaurantSettings
         table = Table.objects.get(id=table_id, is_active=True)
+        
+        # Получаем настройки ресторана
+        try:
+            settings = RestaurantSettings.objects.first()
+            opening_time = settings.opening_time if settings else datetime.strptime('10:00', '%H:%M').time()
+            closing_time = settings.closing_time if settings else datetime.strptime('22:00', '%H:%M').time()
+            booking_interval = settings.booking_interval if settings else 30
+        except:
+            opening_time = datetime.strptime('10:00', '%H:%M').time()
+            closing_time = datetime.strptime('22:00', '%H:%M').time()
+            booking_interval = 30
+        
+        # Получаем существующие бронирования на эту дату
+        existing_bookings = Booking.objects.filter(
+            table=table,
+            date=date,
+            status__in=['confirmed', 'active', 'pending']
+        ).order_by('start_time')
+        
+        # Генерируем доступные слоты
+        available_slots = []
+        current_time = datetime.combine(date, opening_time)
+        end_of_day = datetime.combine(date, closing_time)
+        
+        while current_time + timedelta(minutes=duration) <= end_of_day:
+            slot_end = current_time + timedelta(minutes=duration)
+            
+            # Проверяем, не пересекается ли слот с существующими бронированиями
+            is_available = True
+            for booking in existing_bookings:
+                if (current_time < booking.end_time and slot_end > booking.start_time):
+                    is_available = False
+                    break
+            
+            if is_available:
+                available_slots.append({
+                    'start_time': current_time.strftime('%H:%M'),
+                    'end_time': slot_end.strftime('%H:%M'),
+                    'datetime_start': current_time.isoformat(),
+                    'datetime_end': slot_end.isoformat()
+                })
+            
+            current_time += timedelta(minutes=booking_interval)
+        
+        return Response({
+            'date': date,
+            'table': table.name,
+            'available_slots': available_slots
+        })
+        
     except Table.DoesNotExist:
         return Response({'error': 'Столик не найден'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def create_payment(request, booking_id):
+    """Создание платежа для бронирования"""
+    booking = get_object_or_404(Booking, id=booking_id)
     
-    # Получаем настройки ресторана
-    try:
-        settings = RestaurantSettings.objects.first()
-        if settings:
-            opening_time = settings.opening_time
-            closing_time = settings.closing_time
-            booking_interval = settings.booking_interval
-            default_duration = settings.default_booking_duration
-        else:
-            opening_time = time(10, 0)
-            closing_time = time(23, 0)
-            booking_interval = 30
-            default_duration = 120
-    except:
-        opening_time = time(10, 0)
-        closing_time = time(23, 0)
-        booking_interval = 30
-        default_duration = 120
+    # Проверяем права доступа
+    if booking.user != request.user and not request.user.is_staff:
+        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
     
-    if not duration:
-        duration = default_duration
+    method = request.data.get('method', 'click')
+    amount = request.data.get('amount', booking.deposit_amount)
     
-    # Получаем существующие бронирования на эту дату
-    existing_bookings = Booking.objects.filter(
-        table=table,
-        date=date,
-        status__in=['confirmed', 'active', 'pending']
-    ).order_by('start_time')
+    # Создаем платеж
+    payment = Payment.objects.create(
+        booking=booking,
+        payment_id=f"PAY_{booking.booking_number}_{timezone.now().strftime('%Y%m%d%H%M%S')}",
+        amount=amount,
+        method=method
+    )
     
-    # Генерируем временные слоты
-    available_slots = []
-    current_datetime = datetime.combine(date, opening_time)
-    end_datetime = datetime.combine(date, closing_time)
-    
-    # Если дата сегодня, начинаем с текущего времени
-    if date == timezone.now().date():
-        now = timezone.now()
-        if current_datetime < now:
-            # Округляем до ближайшего интервала
-            minutes_to_add = booking_interval - (now.minute % booking_interval)
-            current_datetime = now.replace(second=0, microsecond=0) + timedelta(minutes=minutes_to_add)
-    
-    while current_datetime + timedelta(minutes=duration) <= end_datetime:
-        slot_start = current_datetime
-        slot_end = current_datetime + timedelta(minutes=duration)
-        
-        # Проверяем, не пересекается ли слот с существующими бронированиями
-        is_available = True
-        for booking in existing_bookings:
-            booking_start = booking.start_time
-            booking_end = booking.end_time
-            
-            if (slot_start < booking_end and slot_end > booking_start):
-                is_available = False
-                break
-        
-        if is_available:
-            available_slots.append({
-                'start_time': slot_start.time().strftime('%H:%M'),
-                'end_time': slot_end.time().strftime('%H:%M'),
-                'duration': duration
-            })
-        
-        current_datetime += timedelta(minutes=booking_interval)
+    # Интеграция с платежными системами
+    if method == 'click':
+        payment_url = create_click_payment(payment)
+    elif method == 'payme':
+        payment_url = create_payme_payment(payment)
+    else:
+        payment_url = f"/payment/manual/{payment.id}/"
     
     return Response({
-        'date': date,
-        'table_id': table_id,
-        'available_slots': available_slots
+        'payment_id': payment.payment_id,
+        'payment_url': payment_url,
+        'amount': payment.amount
     })
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def cancel_booking(request, booking_id):
-    """Отмена бронирования"""
-    
-    try:
-        if request.user.is_admin_user:
-            booking = Booking.objects.get(id=booking_id)
-        else:
-            booking = Booking.objects.get(id=booking_id, user=request.user)
-    except Booking.DoesNotExist:
-        return Response({'error': 'Бронирование не найдено'}, status=status.HTTP_404_NOT_FOUND)
-    
-    if not booking.can_be_cancelled:
-        return Response(
-            {'error': 'Бронирование нельзя отменить (слишком поздно или уже завершено)'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    reason = request.data.get('reason', '')
-    booking.cancel(reason)
-    
-    return Response({'message': 'Бронирование успешно отменено'})
+def create_click_payment(payment):
+    """Создание платежа через Click"""
+    # Здесь будет интеграция с Click API
+    return f"https://my.click.uz/services/pay?service_id=YOUR_SERVICE_ID&merchant_id=YOUR_MERCHANT_ID&amount={payment.amount}&transaction_param={payment.payment_id}"
 
-@api_view(['POST'])
-@permission_classes([permissions.IsAuthenticated])
-def confirm_booking(request, booking_id):
-    """Подтверждение бронирования (только для администраторов)"""
+def create_payme_payment(payment):
+    """Создание платежа через Payme"""
+    # Здесь будет интеграция с Payme API
+    import base64
+    import json
     
-    if not request.user.is_admin_user:
-        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
+    params = {
+        'merchant': 'YOUR_MERCHANT_ID',
+        'amount': int(payment.amount * 100),  # Payme работает в тийинах
+        'account': {
+            'booking_id': payment.booking.id
+        }
+    }
     
-    try:
-        booking = Booking.objects.get(id=booking_id)
-    except Booking.DoesNotExist:
-        return Response({'error': 'Бронирование не найдено'}, status=status.HTTP_404_NOT_FOUND)
-    
-    if booking.status != 'pending':
-        return Response(
-            {'error': 'Можно подтвердить только ожидающие бронирования'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    booking.confirm()
-    
-    return Response({'message': 'Бронирование подтверждено'})
+    encoded_params = base64.b64encode(json.dumps(params).encode()).decode()
+    return f"https://checkout.paycom.uz/{encoded_params}"
 
 @api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
+@permission_classes([permissions.IsAdminUser])
 def booking_statistics(request):
-    """Статистика бронирований (только для администраторов)"""
-    
-    if not request.user.is_admin_user:
-        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
-    
+    """Статистика бронирований"""
     today = timezone.now().date()
     
     stats = {
@@ -192,6 +239,9 @@ def booking_statistics(request):
         'active_bookings': Booking.objects.filter(status='active').count(),
         'completed_bookings': Booking.objects.filter(status='completed').count(),
         'cancelled_bookings': Booking.objects.filter(status='cancelled').count(),
+        'total_revenue': sum(b.total_amount for b in Booking.objects.filter(status='completed')),
+        'pending_payments': Booking.objects.filter(payment_status='pending').count(),
+        'deposit_paid': Booking.objects.filter(payment_status='deposit_paid').count(),
     }
     
     return Response(stats)

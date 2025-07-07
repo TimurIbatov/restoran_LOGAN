@@ -1,72 +1,48 @@
 from rest_framework import generics, permissions, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from .models import UserProfile
-from .serializers import UserSerializer, UserUpdateSerializer, AdminUserSerializer
+from .serializers import UserSerializer, UserProfileSerializer, EmailVerificationSerializer
 
 User = get_user_model()
 
 class UserProfileView(generics.RetrieveUpdateAPIView):
-    """Просмотр и обновление профиля пользователя"""
-    
-    serializer_class = UserUpdateSerializer
+    """Просмотр и редактирование профиля пользователя"""
+    serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
         return self.request.user
-    
-    def get_serializer_class(self):
-        if self.request.method == 'GET':
-            return UserSerializer
-        return UserUpdateSerializer
 
-class UserListView(generics.ListAPIView):
-    """Список пользователей (только для администраторов)"""
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def verify_email(request):
+    """Подтверждение email по токену"""
+    serializer = EmailVerificationSerializer(data=request.data)
+    if serializer.is_valid():
+        token = serializer.validated_data['token']
+        user = get_object_or_404(User, email_verification_token=token, email_verified=False)
+        user.verify_email()
+        
+        return Response({
+            'message': 'Email успешно подтвержден',
+            'user_id': user.id
+        })
     
-    queryset = User.objects.all().select_related('profile')
-    serializer_class = AdminUserSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_queryset(self):
-        if not self.request.user.is_admin_user:
-            return User.objects.none()
-        return super().get_queryset()
-
-@api_view(['GET'])
-@permission_classes([permissions.IsAuthenticated])
-def current_user(request):
-    """Получение данных текущего пользователя"""
-    serializer = UserSerializer(request.user)
-    return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 @permission_classes([permissions.IsAuthenticated])
-def change_password(request):
-    """Изменение пароля пользователя"""
+def resend_email_verification(request):
+    """Повторная отправка email подтверждения"""
     user = request.user
-    current_password = request.data.get('current_password')
-    new_password = request.data.get('new_password')
     
-    if not current_password or not new_password:
-        return Response(
-            {'error': 'Необходимо указать текущий и новый пароль'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    if user.email_verified:
+        return Response({'message': 'Email уже подтвержден'}, status=status.HTTP_400_BAD_REQUEST)
     
-    if not user.check_password(current_password):
-        return Response(
-            {'error': 'Неверный текущий пароль'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
+    from .tasks import send_email_verification
+    send_email_verification.delay(user.id)
     
-    if len(new_password) < 8:
-        return Response(
-            {'error': 'Новый пароль должен содержать минимум 8 символов'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    user.set_password(new_password)
-    user.save()
-    
-    return Response({'message': 'Пароль успешно изменен'})
+    return Response({'message': 'Email подтверждения отправлен повторно'})

@@ -121,13 +121,13 @@ body {
   color: white;
 }
 
-.status-partially {
-  background: linear-gradient(45deg, #ffc107, #fd7e14);
+.status-occupied {
+  background: linear-gradient(45deg, #dc3545, #e83e8c);
   color: white;
 }
 
-.status-booked {
-  background: linear-gradient(45deg, #dc3545, #e83e8c);
+.status-reserved {
+  background: linear-gradient(45deg, #ffc107, #fd7e14);
   color: white;
 }
 
@@ -240,6 +240,81 @@ body {
   min-width: 300px;
 }
 
+/* Стили для панелей администратора и сотрудника */
+.dashboard-card {
+  transition: all 0.3s ease;
+  border: none;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 15px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card h3 {
+  font-size: 2.5rem;
+  font-weight: bold;
+  margin-bottom: 0;
+}
+
+.role-badge {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
+/* Анимации для уведомлений */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.toast.show {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* Стили для бронирования с едой */
+.menu-selection {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.menu-selection .card {
+  transition: all 0.3s ease;
+}
+
+.menu-selection .card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.booking-tabs .nav-link {
+  border: none;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.booking-tabs .nav-link.active {
+  background-color: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+/* Адаптивность */
 @media (max-width: 768px) {
   .zone-overlay h2 {
     font-size: 1.8rem;
@@ -251,6 +326,10 @@ body {
   
   .table-card .card-img-top {
     height: 150px !important;
+  }
+  
+  .stat-card h3 {
+    font-size: 2rem;
   }
 }
 
@@ -266,4 +345,40 @@ body {
   .zone-image {
     height: 150px !important;
   }
+  
+  .stat-card {
+    padding: 15px;
+  }
+  
+  .stat-card h3 {
+    font-size: 1.8rem;
+  }
+}
+
+/* Стили для выпадающего меню пользователя */
+.dropdown-menu {
+  border: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+  padding: 10px 0;
+}
+
+.dropdown-item {
+  padding: 8px 20px;
+  transition: all 0.3s ease;
+}
+
+.dropdown-item:hover {
+  background-color: #f8f9fa;
+  transform: translateX(5px);
+}
+
+.dropdown-divider {
+  margin: 8px 0;
+}
+
+/* Стили для кнопки выхода */
+.dropdown-item.text-danger:hover {
+  background-color: #f8d7da;
+  color: #721c24 !important;
 }

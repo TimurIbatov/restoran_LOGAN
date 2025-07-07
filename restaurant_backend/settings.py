@@ -13,6 +13,9 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
 
+# Frontend URL for email links
+FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+
 # Application definition
 DJANGO_APPS = [
     'django.contrib.admin',
@@ -131,8 +134,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'DEFAULT_PAGINATION_CLASS': None,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
@@ -201,6 +203,17 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
 EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@restaurant-logan.com')
+
+# SMS settings
+SMS_API_TOKEN = config('SMS_API_TOKEN', default='')
+
+# Payment settings
+CLICK_MERCHANT_ID = config('CLICK_MERCHANT_ID', default='')
+CLICK_SERVICE_ID = config('CLICK_SERVICE_ID', default='')
+CLICK_SECRET_KEY = config('CLICK_SECRET_KEY', default='')
+
+PAYME_MERCHANT_ID = config('PAYME_MERCHANT_ID', default='')
+PAYME_SECRET_KEY = config('PAYME_SECRET_KEY', default='')
 
 # Logging
 LOGGING = {
