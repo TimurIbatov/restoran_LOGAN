@@ -18,14 +18,14 @@ class UserProfileSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     """Сериализатор пользователя"""
     profile = UserProfileSerializer(read_only=True)
-    password = serializers.CharField(write_only=True)
+    password = serializers.CharField(write_only=True, required=False)
     
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name', 'phone', 'role',
             'email_verified', 'date_of_birth', 'avatar', 'email_notifications',
-            'sms_notifications', 'created_at', 'profile'
+            'sms_notifications', 'address', 'created_at', 'profile'
         ]
         read_only_fields = ['id', 'role', 'email_verified', 'created_at']
         extra_kwargs = {
@@ -33,17 +33,21 @@ class UserSerializer(serializers.ModelSerializer):
         }
     
     def create(self, validated_data):
-        password = validated_data.pop('password')
+        password = validated_data.pop('password', None)
         user = User.objects.create_user(**validated_data)
-        user.set_password(password)
-        user.save()
+        if password:
+            user.set_password(password)
+            user.save()
         
         # Создаем профиль
-        UserProfile.objects.create(user=user)
+        UserProfile.objects.get_or_create(user=user)
         
         # Отправляем email подтверждение
-        from .tasks import send_email_verification
-        send_email_verification.delay(user.id)
+        try:
+            from .tasks import send_email_verification
+            send_email_verification.delay(user.id)
+        except ImportError:
+            pass  # Если Celery не настроен
         
         return user
     

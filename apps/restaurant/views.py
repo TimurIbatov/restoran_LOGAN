@@ -12,6 +12,33 @@ from .serializers import (
     MenuItemSerializer, RestaurantSettingsSerializer
 )
 
+class ZoneListCreateView(generics.ListCreateAPIView):
+    """Список и создание зон"""
+    
+    serializer_class = ZoneSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'sort_order']
+    ordering = ['sort_order', 'name']
+    
+    def get_queryset(self):
+        if self.request.user.is_authenticated and self.request.user.is_staff:
+            return Zone.objects.all()
+        return Zone.objects.filter(is_active=True)
+    
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [permissions.IsAdminUser()]
+        return [permissions.AllowAny()]
+
+class ZoneDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Детали, обновление и удаление зоны"""
+    
+    queryset = Zone.objects.all()
+    serializer_class = ZoneSerializer
+    permission_classes = [permissions.IsAdminUser]
+    lookup_field = 'id'
+
 class ZoneListView(generics.ListAPIView):
     """Список зон ресторана"""
     
@@ -209,7 +236,7 @@ class RestaurantSettingsView(generics.RetrieveAPIView):
         settings, created = RestaurantSettings.objects.get_or_create(
             defaults={
                 'name': 'Ресторан "LOGAN"',
-                'address': 'ул. Рудаки, 1',
+                'address': 'г. Ташкент, ул. Рудаки, 1',
                 'phone': '+998 (93) 668-29-24',
                 'email': 'info@restaurant-logan.com'
             }

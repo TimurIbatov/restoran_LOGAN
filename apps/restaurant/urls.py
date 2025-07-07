@@ -5,6 +5,8 @@ app_name = 'restaurant'
 
 urlpatterns = [
     path('zones/', views.ZoneListView.as_view(), name='zone-list'),
+    path('zones/manage/', views.ZoneListCreateView.as_view(), name='zone-list-create'),
+    path('zones/<int:id>/', views.ZoneDetailView.as_view(), name='zone-detail'),
     path('tables/', views.TableListView.as_view(), name='table-list'),
     path('tables/<int:id>/', views.TableDetailView.as_view(), name='table-detail'),
     path('menu/categories/', views.MenuCategoryListView.as_view(), name='menu-category-list'),
