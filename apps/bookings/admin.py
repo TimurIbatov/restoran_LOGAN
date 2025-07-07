@@ -23,21 +23,24 @@ class BookingAdmin(admin.ModelAdmin):
         'id', 'user', 'table', 'date', 'start_time', 'end_time', 
         'guests_count', 'status', 'table_price', 'total_amount', 'created_at'
     ]
-    list_filter = ['status', 'date', 'created_at', 'table__zone']
-    search_fields = ['user__email', 'user__first_name', 'user__last_name', 'table__name']
-    readonly_fields = ['created_at', 'updated_at']
+    list_filter = ['status', 'date', 'created_at']
+    search_fields = ['user__email', 'user__first_name', 'user__last_name', 'booking_number']
+    readonly_fields = ['created_at', 'updated_at', 'booking_number']
     date_hierarchy = 'date'
     ordering = ['-start_time']
     
     fieldsets = (
         ('Основная информация', {
-            'fields': ('user', 'table', 'date', 'start_time', 'end_time', 'guests_count')
+            'fields': ('user', 'table', 'date', 'start_time', 'end_time', 'guests_count', 'booking_number')
         }),
         ('Статус и цены', {
-            'fields': ('status', 'table_price', 'total_amount')
+            'fields': ('status', 'payment_status', 'table_price', 'total_amount')
+        }),
+        ('Контактная информация', {
+            'fields': ('contact_name', 'contact_phone', 'contact_email')
         }),
         ('Дополнительная информация', {
-            'fields': ('special_requests', 'created_at', 'updated_at'),
+            'fields': ('comment', 'special_requests', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
@@ -47,7 +50,7 @@ class BookingAdmin(admin.ModelAdmin):
     actions = ['confirm_bookings', 'cancel_bookings', 'complete_bookings']
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('user', 'table', 'table__zone')
+        return super().get_queryset(request).select_related('user', 'table')
     
     def confirm_bookings(self, request, queryset):
         count = 0
@@ -78,7 +81,7 @@ class BookingAdmin(admin.ModelAdmin):
 class BookingMenuItemAdmin(admin.ModelAdmin):
     """Админ-панель для предзаказанных блюд"""
     
-    list_display = ['booking', 'menu_item', 'quantity', 'price_per_item']
+    list_display = ['booking', 'menu_item', 'quantity', 'price_per_item', 'total_price']
     list_filter = ['booking__date', 'menu_item__category']
     search_fields = ['booking__user__email', 'menu_item__name']
     
@@ -91,7 +94,7 @@ class BookingHistoryAdmin(admin.ModelAdmin):
     
     list_display = ['booking', 'action', 'old_status', 'new_status', 'changed_by', 'created_at']
     list_filter = ['action', 'old_status', 'new_status', 'created_at']
-    search_fields = ['booking__id', 'comment']
+    search_fields = ['booking__booking_number', 'comment']
     readonly_fields = ['created_at']
     
     def get_queryset(self, request):

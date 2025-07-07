@@ -7,18 +7,18 @@ from .models import User, UserProfile
 class UserAdmin(BaseUserAdmin):
     """Админ-панель для пользователей"""
     
-    list_display = ['email', 'full_name', 'role', 'is_verified', 'is_active', 'created_at']
-    list_filter = ['role', 'is_verified', 'is_active', 'created_at']
+    list_display = ['email', 'full_name', 'role', 'email_verified', 'is_active', 'created_at']
+    list_filter = ['role', 'email_verified', 'is_active', 'created_at']
     search_fields = ['email', 'first_name', 'last_name', 'username', 'phone']
     ordering = ['-created_at']
     
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
         (_('Личная информация'), {
-            'fields': ('first_name', 'last_name', 'email', 'phone', 'birth_date', 'address', 'avatar')
+            'fields': ('first_name', 'last_name', 'email', 'phone', 'date_of_birth', 'address', 'avatar')
         }),
         (_('Права доступа'), {
-            'fields': ('role', 'is_active', 'is_verified', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
+            'fields': ('role', 'is_active', 'email_verified', 'is_staff', 'is_superuser', 'groups', 'user_permissions'),
         }),
         (_('Важные даты'), {'fields': ('last_login', 'date_joined')}),
     )
@@ -30,7 +30,7 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
     
-    readonly_fields = ['created_at', 'updated_at']
+    readonly_fields = ['created_at']
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('profile')
@@ -39,24 +39,24 @@ class UserAdmin(BaseUserAdmin):
 class UserProfileAdmin(admin.ModelAdmin):
     """Админ-панель для профилей пользователей"""
     
-    list_display = ['user', 'loyalty_points', 'total_visits', 'total_spent', 'favorite_table']
-    list_filter = ['total_visits', 'loyalty_points']
+    list_display = ['user', 'loyalty_points', 'total_visits', 'total_spent', 'vip_status']
+    list_filter = ['total_visits', 'loyalty_points', 'vip_status']
     search_fields = ['user__email', 'user__first_name', 'user__last_name']
     readonly_fields = ['total_visits', 'total_spent']
     
     fieldsets = (
         (_('Основная информация'), {
-            'fields': ('user', 'favorite_table')
+            'fields': ('user', 'favorite_table_zone')
         }),
         (_('Статистика'), {
-            'fields': ('loyalty_points', 'total_visits', 'total_spent'),
+            'fields': ('loyalty_points', 'total_visits', 'total_spent', 'vip_status'),
             'classes': ('collapse',)
         }),
         (_('Дополнительно'), {
-            'fields': ('preferences', 'notes'),
+            'fields': ('dietary_restrictions', 'special_occasions'),
             'classes': ('collapse',)
         }),
     )
     
     def get_queryset(self, request):
-        return super().get_queryset(request).select_related('user', 'favorite_table')
+        return super().get_queryset(request).select_related('user')
