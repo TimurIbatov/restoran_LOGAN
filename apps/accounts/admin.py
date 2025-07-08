@@ -7,10 +7,10 @@ from .models import User, UserProfile
 class UserAdmin(BaseUserAdmin):
     """Админ-панель для пользователей"""
     
-    list_display = ['email', 'full_name', 'role', 'email_verified', 'is_active', 'created_at']
+    list_display = ['email', 'full_name', 'role', 'email_verified', 'is_active', 'date_joined']
     list_filter = ['role', 'email_verified', 'is_active', 'created_at']
     search_fields = ['email', 'first_name', 'last_name', 'username', 'phone']
-    ordering = ['-created_at']
+    ordering = ['-date_joined']
     
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
@@ -30,7 +30,7 @@ class UserAdmin(BaseUserAdmin):
         }),
     )
     
-    readonly_fields = ['created_at']
+    readonly_fields = ['date_joined', 'last_login']
     
     def get_queryset(self, request):
         return super().get_queryset(request).select_related('profile')

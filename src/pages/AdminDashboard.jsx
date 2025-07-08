@@ -318,10 +318,16 @@ const AdminDashboard = () => {
                     </div>
                   </div>
                 </div>
+                    <div className="mt-2">
+                      <small>+{stats.todayBookings} сегодня</small>
+                    </div>
 
                 <div className="card">
                   <div className="card-header">
-                    <h5 className="mb-0">Последние бронирования</h5>
+                    <div className="d-flex justify-content-between align-items-center">
+                      <h5 className="mb-0">Последние бронирования</h5>
+                      <span className="badge bg-primary">{bookings.length} всего</span>
+                    </div>
                   </div>
                   <div className="card-body">
                     {bookings.length > 0 ? (
@@ -330,9 +336,12 @@ const AdminDashboard = () => {
                           <thead>
                             <tr>
                               <th>ID</th>
-                              <th>Клиент</th>
+                              <th>Пользователь</th>
                               <th>Столик</th>
                               <th>Дата/Время</th>
+                              <th>Сумма</th>
+                              <th>Статус</th>
+                              <th>Регистрация</th>
                               <th>Статус</th>
                               <th>Действия</th>
                             </tr>
@@ -341,9 +350,24 @@ const AdminDashboard = () => {
                             {bookings.slice(0, 5).map((booking) => (
                               <tr key={booking.id}>
                                 <td>#{booking.id}</td>
-                                <td>{booking.user_name || booking.contact_name}</td>
+                                <td>
+                                  <div>
+                                    <strong>{booking.user_name || booking.contact_name}</strong>
+                                    <br />
+                                    <small className="text-muted">{booking.contact_phone}</small>
+                                  </div>
+                                </td>
                                 <td>{booking.table_details?.name}</td>
-                                <td>{new Date(booking.start_time).toLocaleString("ru-RU")}</td>
+                                <td>
+                                  <div>
+                                    {new Date(booking.start_time).toLocaleDateString("ru-RU")}
+                                    <br />
+                                    <small>{new Date(booking.start_time).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })}</small>
+                                  </div>
+                                </td>
+                                <td>
+                                  <strong>{booking.total_amount?.toLocaleString() || 0} сум</strong>
+                                </td>
                                 <td>
                                   <span
                                     className={`badge bg-${booking.status === "confirmed" ? "success" : booking.status === "pending" ? "warning" : "secondary"}`}
@@ -357,19 +381,42 @@ const AdminDashboard = () => {
                                       <button
                                         className="btn btn-success"
                                         onClick={() => handleConfirmBooking(booking.id)}
+                                        title="Подтвердить"
                                       >
-                                        Подтвердить
+                                        <i className="bi bi-check"></i>
                                       </button>
                                       <button
                                         className="btn btn-danger"
                                         onClick={() => handleCancelBooking(booking.id)}
+                                        title="Отменить"
                                       >
-                                        Отменить
+                                        <i className="bi bi-x"></i>
                                       </button>
                                     </div>
                                   )}
                                 </td>
                               </tr>
+                                <td>
+                                  <span className={`badge bg-${user.is_active ? 'success' : 'danger'}`}>
+                                    {user.is_active ? 'Активен' : 'Заблокирован'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <div className="btn-group btn-group-sm">
+                                    <button 
+                                      className="btn btn-outline-primary"
+                                      title="Редактировать"
+                                    >
+                                      <i className="bi bi-pencil"></i>
+                                    </button>
+                                    <button 
+                                      className={`btn btn-outline-${user.is_active ? 'warning' : 'success'}`}
+                                      title={user.is_active ? 'Заблокировать' : 'Разблокировать'}
+                                    >
+                                      <i className={`bi bi-${user.is_active ? 'lock' : 'unlock'}`}></i>
+                                    </button>
+                                  </div>
+                                </td>
                             ))}
                           </tbody>
                         </table>
@@ -655,7 +702,14 @@ const AdminDashboard = () => {
                           {users.map((user) => (
                             <tr key={user.id}>
                               <td>#{user.id}</td>
-                              <td>{user.full_name || `${user.first_name} ${user.last_name}`}</td>
+                              <td>
+                                <div>
+                                  <strong>{user.full_name || `${user.first_name} ${user.last_name}` || user.username}</strong>
+                                  {user.email_verified && (
+                                    <i className="bi bi-patch-check-fill text-success ms-1" title="Email подтвержден"></i>
+                                  )}
+                                </div>
+                              </td>
                               <td>{user.email}</td>
                               <td>{user.phone || "-"}</td>
                               <td>
@@ -665,7 +719,18 @@ const AdminDashboard = () => {
                                   <span className="badge bg-secondary">Клиент</span>
                                 )}
                               </td>
-                              <td>{new Date(user.date_joined).toLocaleDateString("ru-RU")}</td>
+                              <td>
+                                <div>
+                                  {new Date(user.date_joined || user.created_at).toLocaleDateString("ru-RU")}
+                                  <br />
+                                  <small className="text-muted">
+                                    {new Date(user.date_joined || user.created_at).toLocaleTimeString("ru-RU", {
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    })}
+                                  </small>
+                                </div>
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1077,6 +1142,9 @@ const MenuItemModal = ({ menuItem, categories, onSave, onClose }) => {
                         />
                       </div>
                     </div>
+                    <div className="mt-2">
+                      <small>Активных: {bookings.filter(b => b.status === 'active').length}</small>
+                    </div>
                   </div>
                   <div className="mb-3">
                     <label className="form-label">Время приготовления (мин)</label>
@@ -1087,6 +1155,9 @@ const MenuItemModal = ({ menuItem, categories, onSave, onClose }) => {
                       onChange={(e) => setFormData({ ...formData, cooking_time: Number.parseInt(e.target.value) || 15 })}
                       min="1"
                     />
+                    <div className="mt-2">
+                      <small>Занято: {stats.totalTables - stats.availableTables}</small>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1099,6 +1170,9 @@ const MenuItemModal = ({ menuItem, categories, onSave, onClose }) => {
                     checked={formData.is_available}
                     onChange={(e) => setFormData({ ...formData, is_available: e.target.checked })}
                   />
+                    <div className="mt-2">
+                      <small>Активных: {users.filter(u => u.is_active).length}</small>
+                    </div>
                   <label className="form-check-label">Доступно для заказа</label>
                 </div>
               </div>
