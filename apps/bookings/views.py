@@ -1,283 +1,261 @@
-import os
-from pathlib import Path
-from decouple import config
+from rest_framework import generics, permissions, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from datetime import datetime, timedelta
+from .models import Booking, BookingMenuItem, Payment
+from .serializers import (
+    BookingSerializer, BookingCreateSerializer, AvailableTimeSlotsSerializer,
+    EmailConfirmationSerializer
+)
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+class BookingListCreateView(generics.ListCreateAPIView):
+    """Список и создание бронирований"""
+    
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return BookingCreateSerializer
+        return BookingSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return Booking.objects.all().select_related('user', 'table').prefetch_related('menu_items', 'payments')
+        return Booking.objects.filter(user=user).select_related('table').prefetch_related('menu_items', 'payments')
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-your-secret-key-here')
+class BookingDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Детали, обновление и удаление бронирования"""
+    
+    serializer_class = BookingSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_staff:
+            return Booking.objects.all()
+        return Booking.objects.filter(user=user)
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def confirm_booking(request, pk):
+    """Подтверждение бронирования"""
+    booking = get_object_or_404(Booking, pk=pk)
+    
+    if not request.user.is_staff:
+        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if booking.status == 'pending':
+        booking.confirm()
+        
+        # Отправляем SMS/Email уведомление
+        from .tasks import send_booking_status_notification
+        send_booking_status_notification.delay(booking.id, 'confirmed')
+        
+        return Response({'message': 'Бронирование подтверждено'})
+    
+    return Response({'error': 'Бронирование нельзя подтвердить'}, status=status.HTTP_400_BAD_REQUEST)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1', cast=lambda v: [s.strip() for s in v.split(',')])
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def cancel_booking(request, pk):
+    """Отмена бронирования"""
+    booking = get_object_or_404(Booking, pk=pk)
+    
+    # Проверяем права доступа
+    if booking.user != request.user and not request.user.is_staff:
+        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
+    
+    if booking.can_be_cancelled:
+        reason = request.data.get('reason', 'Отменено пользователем')
+        booking.cancel(reason)
+        
+        # Отправляем SMS/Email уведомление
+        from .tasks import send_booking_status_notification
+        send_booking_status_notification.delay(booking.id, 'cancelled')
+        
+        return Response({'message': 'Бронирование отменено'})
+    
+    return Response({'error': 'Бронирование нельзя отменить'}, status=status.HTTP_400_BAD_REQUEST)
 
-# Frontend URL for email links
-FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:3000')
+@api_view(['POST'])
+@permission_classes([permissions.AllowAny])
+def confirm_email(request):
+    """Подтверждение email по токену"""
+    serializer = EmailConfirmationSerializer(data=request.data)
+    if serializer.is_valid():
+        token = serializer.validated_data['token']
+        booking = get_object_or_404(Booking, email_confirmation_token=token, email_confirmed=False)
+        booking.confirm_email()
+        
+        return Response({
+            'message': 'Email успешно подтвержден',
+            'booking_number': booking.booking_number,
+            'payment_url': f'/payment/{booking.id}/'
+        })
+    
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-# Application definition
-DJANGO_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-]
+@api_view(['GET'])
+@permission_classes([permissions.AllowAny])
+def available_time_slots(request):
+    """Получение доступных временных слотов"""
+    serializer = AvailableTimeSlotsSerializer(data=request.GET)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    date = serializer.validated_data['date']
+    table_id = serializer.validated_data['table_id']
+    duration = serializer.validated_data.get('duration', 120)
+    
+    try:
+        from apps.restaurant.models import Table, RestaurantSettings
+        table = Table.objects.get(id=table_id, is_active=True)
+        
+        # Получаем настройки ресторана
+        try:
+            settings = RestaurantSettings.objects.first()
+            opening_time = settings.opening_time if settings else datetime.strptime('10:00', '%H:%M').time()
+            closing_time = settings.closing_time if settings else datetime.strptime('22:00', '%H:%M').time()
+            booking_interval = settings.booking_interval if settings else 30
+        except:
+            opening_time = datetime.strptime('10:00', '%H:%M').time()
+            closing_time = datetime.strptime('22:00', '%H:%M').time()
+            booking_interval = 30
+        
+        # Получаем существующие бронирования на эту дату
+        existing_bookings = Booking.objects.filter(
+            table=table,
+            date=date,
+            status__in=['confirmed', 'active', 'pending']
+        ).order_by('start_time')
+        
+        # Генерируем доступные слоты
+        available_slots = []
+        current_time = datetime.combine(date, opening_time)
+        end_of_day = datetime.combine(date, closing_time)
+        
+        while current_time + timedelta(minutes=duration) <= end_of_day:
+            slot_end = current_time + timedelta(minutes=duration)
+            
+            # Проверяем, не пересекается ли слот с существующими бронированиями
+            is_available = True
+            for booking in existing_bookings:
+                if (current_time < booking.end_time and slot_end > booking.start_time):
+                    is_available = False
+                    break
+            
+            if is_available:
+                available_slots.append({
+                    'start_time': current_time.strftime('%H:%M'),
+                    'end_time': slot_end.strftime('%H:%M'),
+                    'datetime_start': current_time.isoformat(),
+                    'datetime_end': slot_end.isoformat()
+                })
+            
+            current_time += timedelta(minutes=booking_interval)
+        
+        return Response({
+            'date': date,
+            'table': table.name,
+            'available_slots': available_slots
+        })
+        
+    except Table.DoesNotExist:
+        return Response({'error': 'Столик не найден'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-THIRD_PARTY_APPS = [
-    'rest_framework',
-    'rest_framework_simplejwt',
-    'corsheaders',
-    'django_filters',
-    'djoser',
-]
+@api_view(['POST'])
+@permission_classes([permissions.IsAuthenticated])
+def create_payment(request, booking_id):
+    """Создание платежа для бронирования"""
+    booking = get_object_or_404(Booking, id=booking_id)
+    
+    # Проверяем права доступа
+    if booking.user != request.user and not request.user.is_staff:
+        return Response({'error': 'Недостаточно прав'}, status=status.HTTP_403_FORBIDDEN)
+    
+    method = request.data.get('method', 'click')
+    amount = request.data.get('amount', booking.deposit_amount)
+    
+    # Создаем платеж
+    payment = Payment.objects.create(
+        booking=booking,
+        payment_id=f"PAY_{booking.booking_number}_{timezone.now().strftime('%Y%m%d%H%M%S')}",
+        amount=amount,
+        method=method
+    )
+    
+    # Интеграция с платежными системами
+    if method == 'click':
+        payment_url = create_click_payment(payment)
+    elif method == 'payme':
+        payment_url = create_payme_payment(payment)
+    elif method == 'uzcard':
+        payment_url = create_uzcard_payment(payment)
+    elif method == 'humo':
+        payment_url = create_humo_payment(payment)
+    else:
+        payment_url = f"/payment/manual/{payment.id}/"
+    
+    return Response({
+        'payment_id': payment.payment_id,
+        'payment_url': payment_url,
+        'amount': payment.amount
+    })
 
-LOCAL_APPS = [
-    'apps.accounts',
-    'apps.restaurant',
-    'apps.bookings',
-    'apps.reviews',
-]
+def create_click_payment(payment):
+    """Создание платежа через Click"""
+    # Здесь будет интеграция с Click API
+    return f"https://my.click.uz/services/pay?service_id=YOUR_SERVICE_ID&merchant_id=YOUR_MERCHANT_ID&amount={payment.amount}&transaction_param={payment.payment_id}"
 
-INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
-
-MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-]
-
-ROOT_URLCONF = 'restaurant_backend.urls'
-
-TEMPLATES = [
-    {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.debug',
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-            ],
-        },
-    },
-]
-
-WSGI_APPLICATION = 'restaurant_backend.wsgi.application'
-
-# Database
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': config('DB_NAME', default='restaurant_logan'),
-        'USER': config('DB_USER', default='postgres'),
-        'PASSWORD': config('DB_PASSWORD', default='password'),
-        'HOST': config('DB_HOST', default='localhost'),
-        'PORT': config('DB_PORT', default='5432'),
+def create_payme_payment(payment):
+    """Создание платежа через Payme"""
+    # Здесь будет интеграция с Payme API
+    import base64
+    import json
+    
+    params = {
+        'merchant': 'YOUR_MERCHANT_ID',
+        'amount': int(payment.amount * 100),  # Payme работает в тийинах
+        'account': {
+            'booking_id': payment.booking.id
+        }
     }
-}
+    
+    encoded_params = base64.b64encode(json.dumps(params).encode()).decode()
+    return f"https://checkout.paycom.uz/{encoded_params}"
 
-# Password validation
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
+def create_uzcard_payment(payment):
+    """Создание платежа через UzCard"""
+    # Здесь будет интеграция с UzCard API
+    return f"https://uzcard.uz/payment?amount={payment.amount}&order_id={payment.payment_id}"
 
-# Internationalization
-LANGUAGE_CODE = 'ru-ru'
-TIME_ZONE = 'Asia/Tashkent'
-USE_I18N = True
-USE_TZ = True
+def create_humo_payment(payment):
+    """Создание платежа через Humo"""
+    # Здесь будет интеграция с Humo API
+    return f"https://humo.uz/payment?amount={payment.amount}&order_id={payment.payment_id}"
 
-# Static files (CSS, JavaScript, Images)
-STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [
-    BASE_DIR / 'static',
-]
-
-# Media files
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
-
-# Default primary key field type
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# Custom User Model
-AUTH_USER_MODEL = 'accounts.User'
-
-# REST Framework configuration
-REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-    ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
-    'DEFAULT_PAGINATION_CLASS': None,
-    'DEFAULT_FILTER_BACKENDS': [
-        'django_filters.rest_framework.DjangoFilterBackend',
-        'rest_framework.filters.SearchFilter',
-        'rest_framework.filters.OrderingFilter',
-    ],
-    'DEFAULT_RENDERER_CLASSES': [
-        'rest_framework.renderers.JSONRenderer',
-    ],
-}
-
-# JWT Settings
-from datetime import timedelta
-
-SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
-    'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,
-    'UPDATE_LAST_LOGIN': True,
-    'ALGORITHM': 'HS256',
-    'SIGNING_KEY': SECRET_KEY,
-    'VERIFYING_KEY': None,
-    'AUTH_HEADER_TYPES': ('Bearer',),
-    'AUTH_HEADER_NAME': 'HTTP_AUTHORIZATION',
-    'USER_ID_FIELD': 'id',
-    'USER_ID_CLAIM': 'user_id',
-}
-
-# CORS settings
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-]
-
-CORS_ALLOW_CREDENTIALS = True
-
-# Djoser settings
-DJOSER = {
-    'SERIALIZERS': {
-        'user_create': 'apps.accounts.serializers.UserSerializer',
-        'user': 'apps.accounts.serializers.UserSerializer',
-        'current_user': 'apps.accounts.serializers.UserSerializer',
-    },
-    'PERMISSIONS': {
-        'user': ['rest_framework.permissions.IsAuthenticated'],
-        'user_list': ['rest_framework.permissions.IsAdminUser'],
-    },
-    'HIDE_USERS': False,
-}
-
-# Celery Configuration
-CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-
-# Email settings
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@restaurant-logan.com')
-
-# SMS settings
-SMS_API_TOKEN = config('SMS_API_TOKEN', default='')
-
-# Payment settings
-CLICK_MERCHANT_ID = config('CLICK_MERCHANT_ID', default='')
-CLICK_SERVICE_ID = config('CLICK_SERVICE_ID', default='')
-CLICK_SECRET_KEY = config('CLICK_SECRET_KEY', default='')
-
-PAYME_MERCHANT_ID = config('PAYME_MERCHANT_ID', default='')
-PAYME_SECRET_KEY = config('PAYME_SECRET_KEY', default='')
-
-# UzCard settings
-UZCARD_MERCHANT_ID = config('UZCARD_MERCHANT_ID', default='')
-UZCARD_SECRET_KEY = config('UZCARD_SECRET_KEY', default='')
-
-# Humo settings
-HUMO_MERCHANT_ID = config('HUMO_MERCHANT_ID', default='')
-HUMO_SECRET_KEY = config('HUMO_SECRET_KEY', default='')
-
-# Logging
-LOGGING = {
-    'version': 1,
-    'disable_existing_loggers': False,
-    'formatters': {
-        'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
-        'simple': {
-            'format': '{levelname} {message}',
-            'style': '{',
-        },
-    },
-    'handlers': {
-        'file': {
-            'level': 'INFO',
-            'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'logs' / 'django.log',
-            'formatter': 'verbose',
-        },
-        'console': {
-            'level': 'DEBUG',
-            'class': 'logging.StreamHandler',
-            'formatter': 'simple',
-        },
-    },
-    'root': {
-        'handlers': ['console', 'file'],
-        'level': 'INFO',
-    },
-    'loggers': {
-        'django': {
-            'handlers': ['console', 'file'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'apps': {
-            'handlers': ['console', 'file'],
-            'level': 'DEBUG',
-            'propagate': False,
-        },
-    },
-}
-
-# Restaurant specific settings
-RESTAURANT_SETTINGS = {
-    'BOOKING_ADVANCE_DAYS': 30,  # Максимум дней вперед для бронирования
-    'MIN_BOOKING_DURATION': 60,  # Минимальная продолжительность бронирования в минутах
-    'MAX_BOOKING_DURATION': 240,  # Максимальная продолжительность бронирования в минутах
-    'DEFAULT_BOOKING_DURATION': 120,  # Стандартная продолжительность бронирования в минутах
-    'BOOKING_INTERVAL': 30,  # Интервал между бронированиями в минутах
-    'WORKING_HOURS': {
-        'start': '10:00',
-        'end': '23:00',
-    },
-    'BOOKING_CANCELLATION_HOURS': 2,  # За сколько часов можно отменить бронирование
-}
+@api_view(['GET'])
+@permission_classes([permissions.IsAdminUser])
+def booking_statistics(request):
+    """Статистика бронирований"""
+    today = timezone.now().date()
+    
+    stats = {
+        'total_bookings': Booking.objects.count(),
+        'today_bookings': Booking.objects.filter(date=today).count(),
+        'pending_bookings': Booking.objects.filter(status='pending').count(),
+        'confirmed_bookings': Booking.objects.filter(status='confirmed').count(),
+        'active_bookings': Booking.objects.filter(status='active').count(),
+        'completed_bookings': Booking.objects.filter(status='completed').count(),
+        'cancelled_bookings': Booking.objects.filter(status='cancelled').count(),
+        'total_revenue': sum(b.total_amount for b in Booking.objects.filter(status='completed')),
+        'pending_payments': Booking.objects.filter(payment_status='pending').count(),
+        'deposit_paid': Booking.objects.filter(payment_status='deposit_paid').count(),
+    }
+    
+    return Response(stats)

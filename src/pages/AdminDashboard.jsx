@@ -607,74 +607,62 @@ const AdminDashboard = () => {
                   </button>
                 </div>
                 <div className="card-body">
-                  <div className="table-responsive">
-                    <table className="table">
-                      <thead>
-                        <tr>
-                          <th>Изображение</th>
-                          <th>Название</th>
-                          <th>Категория</th>
-                          <th>Цена</th>
-                          <th>Статус</th>
-                          <th>Действия</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {menuItems.map((item) => (
-                          <tr key={item.id}>
-                            <td>
-                              {item.image ? (
-                                <img
-                                  src={item.image || "/placeholder.svg"}
-                                  alt={item.name}
-                                  style={{ width: "50px", height: "50px", objectFit: "cover" }}
-                                  className="rounded"
-                                />
-                              ) : (
-                                <div
-                                  className="bg-light rounded d-flex align-items-center justify-content-center"
-                                  style={{ width: "50px", height: "50px" }}
-                                >
-                                  <i className="bi bi-image text-muted"></i>
-                                </div>
-                              )}
-                            </td>
-                            <td>
-                              <strong>{item.name}</strong>
-                              <br />
-                              <small className="text-muted">{item.description}</small>
-                            </td>
-                            <td>{item.category_name}</td>
-                            <td>{item.price.toLocaleString()} сум</td>
-                            <td>
-                              <span className={`badge bg-${item.is_available ? "success" : "danger"}`}>
-                                {item.is_available ? "Доступно" : "Недоступно"}
-                              </span>
-                            </td>
-                            <td>
-                              <div className="btn-group btn-group-sm">
-                                <button
-                                  className="btn btn-outline-primary"
-                                  onClick={() => {
-                                    setEditingMenuItem(item)
-                                    setShowMenuModal(true)
-                                  }}
-                                >
-                                  <i className="bi bi-pencil"></i>
-                                </button>
-                                <button
-                                  className="btn btn-outline-danger"
-                                  onClick={() => handleDeleteMenuItem(item.id)}
-                                >
-                                  <i className="bi bi-trash"></i>
-                                </button>
+                  {menuItems.length > 0 ? (
+                    <div className="row">
+                      {menuItems.map((item) => (
+                        <div key={item.id} className="col-lg-4 col-md-6 mb-4">
+                          <div className="card h-100">
+                            {item.image && (
+                              <img
+                                src={item.image || "/placeholder.svg"}
+                                className="card-img-top"
+                                alt={item.name}
+                                style={{ height: "200px", objectFit: "cover" }}
+                              />
+                            )}
+                            <div className="card-body d-flex flex-column">
+                              <div className="d-flex justify-content-between align-items-start mb-2">
+                                <h6 className="card-title">{item.name}</h6>
+                                <span className={`badge bg-${item.is_available ? "success" : "danger"}`}>
+                                  {item.is_available ? "Доступно" : "Недоступно"}
+                                </span>
                               </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                              <p className="card-text small text-muted">{item.description}</p>
+                              <div className="mt-auto">
+                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                  <span className="badge bg-secondary">{item.category_name}</span>
+                                  <strong className="text-success">{item.price?.toLocaleString()} сум</strong>
+                                </div>
+                                <div className="btn-group btn-group-sm w-100">
+                                  <button
+                                    className="btn btn-outline-primary"
+                                    onClick={() => {
+                                      setEditingMenuItem(item)
+                                      setShowMenuModal(true)
+                                    }}
+                                  >
+                                    <i className="bi bi-pencil"></i>
+                                  </button>
+                                  <button
+                                    className="btn btn-outline-danger"
+                                    onClick={() => handleDeleteMenuItem(item.id)}
+                                  >
+                                    <i className="bi bi-trash"></i>
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-5">
+                      <i className="bi bi-journal-text display-1 text-muted"></i>
+                      <h4 className="mt-3">Нет блюд в меню</h4>
+                      <p className="text-muted">Добавьте первое блюдо в меню</p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -695,7 +683,9 @@ const AdminDashboard = () => {
                             <th>Email</th>
                             <th>Телефон</th>
                             <th>Роль</th>
-                            <th>Дата регистрации</th>
+                            <th>Статус</th>
+                            <th>Регистрация</th>
+                            <th>Действия</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -703,6 +693,13 @@ const AdminDashboard = () => {
                             <tr key={user.id}>
                               <td>#{user.id}</td>
                               <td>
+                                <div>
+                                  <strong>{user.full_name || `${user.first_name} ${user.last_name}` || user.username}</strong>
+                                  {user.email_verified && (
+                                    <i className="bi bi-patch-check-fill text-success ms-1" title="Email подтвержден"></i>
+                                  )}
+                                </div>
+                              </td>
                                 <div>
                                   <strong>{user.full_name || `${user.first_name} ${user.last_name}` || user.username}</strong>
                                   {user.email_verified && (
@@ -720,6 +717,38 @@ const AdminDashboard = () => {
                                 )}
                               </td>
                               <td>
+                                <span className={`badge bg-${user.is_active ? "success" : "danger"}`}>
+                                  {user.is_active ? "Активен" : "Заблокирован"}
+                                </span>
+                              </td>
+                              <td>
+                                <div>
+                                  {new Date(user.date_joined).toLocaleDateString("ru-RU")}
+                                  <br />
+                                  <small className="text-muted">
+                                    {new Date(user.date_joined).toLocaleTimeString("ru-RU", {
+                                      hour: "2-digit",
+                                      minute: "2-digit"
+                                    })}
+                                  </small>
+                                </div>
+                              </td>
+                              <td>
+                                <div className="btn-group btn-group-sm">
+                                  <button
+                                    className="btn btn-outline-primary"
+                                    title="Редактировать"
+                                  >
+                                    <i className="bi bi-pencil"></i>
+                                  </button>
+                                  <button
+                                    className={`btn btn-outline-${user.is_active ? "warning" : "success"}`}
+                                    title={user.is_active ? "Заблокировать" : "Разблокировать"}
+                                  >
+                                    <i className={`bi bi-${user.is_active ? "lock" : "unlock"}`}></i>
+                                  </button>
+                                </div>
+                              </td>
                                 <div>
                                   {new Date(user.date_joined || user.created_at).toLocaleDateString("ru-RU")}
                                   <br />
