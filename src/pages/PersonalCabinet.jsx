@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext"
 import { useToast } from "../contexts/ToastContext"
 import { bookingAPI, accountAPI } from "../utils/api"
 import LoadingSpinner from "../components/LoadingSpinner"
+import PaymentModal from "../components/PaymentModal"
 
 const PersonalCabinet = () => {
   const [profileData, setProfileData] = useState({
@@ -24,6 +25,8 @@ const PersonalCabinet = () => {
   const [loading, setLoading] = useState(true)
   const [profileLoading, setProfileLoading] = useState(false)
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [selectedBooking, setSelectedBooking] = useState(null)
 
   const { user, isAuthenticated, updateProfile } = useAuth()
   const { showToast } = useToast()
@@ -178,6 +181,18 @@ const PersonalCabinet = () => {
         showToast("Ошибка", error.message || "Не удалось отменить бронирование", "error")
       }
     }
+  }
+
+  const handlePayment = (booking) => {
+    setSelectedBooking(booking)
+    setShowPaymentModal(true)
+  }
+
+  const handlePaymentSuccess = () => {
+    setShowPaymentModal(false)
+    setSelectedBooking(null)
+    loadBookingHistory()
+    showToast('Успешно', 'Платеж обработан', 'success')
   }
 
   if (!isAuthenticated) {
@@ -404,9 +419,21 @@ const PersonalCabinet = () => {
 
                         {booking.can_be_cancelled && (
                           <div className="mt-3">
-                            <button className="btn btn-sm btn-outline-danger" onClick={() => cancelBooking(booking.id)}>
-                              Отменить бронирование
-                            </button>
+                            <div className="d-flex gap-2">
+                              {booking.payment_status === 'pending' && (
+                                <button 
+                                  className="btn btn-sm btn-success" 
+                                  onClick={() => handlePayment(booking)}
+                                >
+                                  <i className="bi bi-credit-card me-1"></i>
+                                  Оплатить депозит
+                                </button>
+                              )}
+                              <button className="btn btn-sm btn-outline-danger" onClick={() => cancelBooking(booking.id)}>
+                                <i className="bi bi-x-circle me-1"></i>
+                                Отменить
+                              </button>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -418,6 +445,15 @@ const PersonalCabinet = () => {
           </div>
         </div>
       </main>
+
+      {/* Модальное окно оплаты */}
+      {showPaymentModal && selectedBooking && (
+        <PaymentModal
+          booking={selectedBooking}
+          onClose={() => setShowPaymentModal(false)}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   )
 }
