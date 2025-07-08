@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "../contexts/AuthContext"
 import { useToast } from "../contexts/ToastContext"
 import { restaurantAPI, bookingAPI } from "../utils/api"
@@ -9,6 +10,7 @@ import LoadingSpinner from "../components/LoadingSpinner"
 const Booking = () => {
   const { user, isAuthenticated } = useAuth()
   const { showToast } = useToast()
+  const navigate = useNavigate()
 
   // Состояния
   const [loading, setLoading] = useState(false)
@@ -33,6 +35,14 @@ const Booking = () => {
     contactEmail: "",
   })
 
+  // Проверка авторизации
+  useEffect(() => {
+    if (!isAuthenticated) {
+      showToast("Требуется авторизация", "Для бронирования столика необходимо войти в систему", "warning")
+      navigate("/login")
+      return
+    }
+  }, [isAuthenticated, navigate])
   useEffect(() => {
     loadInitialData()
   }, [])
@@ -231,6 +241,10 @@ const Booking = () => {
     return <LoadingSpinner />
   }
 
+  // Если пользователь не авторизован, не показываем страницу
+  if (!isAuthenticated) {
+    return null
+  }
   const filteredTables = selectedZone ? tables.filter((table) => table.zone === Number.parseInt(selectedZone)) : tables
 
   return (
@@ -563,9 +577,31 @@ const Booking = () => {
                       <strong>Итого к оплате:</strong> {calculateTotal().toLocaleString()} сум
                     </div>
 
+                    <div className="mt-3">
+                      <h6>Способы оплаты:</h6>
+                      <div className="d-flex flex-wrap gap-2">
+                        <span className="badge bg-primary">
+                          <i className="bi bi-credit-card me-1"></i>
+                          Click
+                        </span>
+                        <span className="badge bg-success">
+                          <i className="bi bi-wallet2 me-1"></i>
+                          Payme
+                        </span>
+                        <span className="badge bg-info">
+                          <i className="bi bi-credit-card-2-front me-1"></i>
+                          UzCard
+                        </span>
+                        <span className="badge bg-warning text-dark">
+                          <i className="bi bi-credit-card-2-back me-1"></i>
+                          Humo
+                        </span>
+                      </div>
+                    </div>
                     <small className="text-muted">
                       * Депозит оплачивается при бронировании
                       <br />* Остальная сумма оплачивается в ресторане
+                      <br />* Доступна оплата через банковские приложения
                     </small>
                   </>
                 )}

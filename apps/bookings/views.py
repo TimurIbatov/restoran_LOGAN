@@ -194,6 +194,10 @@ def create_payment(request, booking_id):
         payment_url = create_click_payment(payment)
     elif method == 'payme':
         payment_url = create_payme_payment(payment)
+    elif method == 'uzcard':
+        payment_url = create_uzcard_payment(payment)
+    elif method == 'humo':
+        payment_url = create_humo_payment(payment)
     else:
         payment_url = f"/payment/manual/{payment.id}/"
     
@@ -205,26 +209,55 @@ def create_payment(request, booking_id):
 
 def create_click_payment(payment):
     """Создание платежа через Click"""
-    # Здесь будет интеграция с Click API
-    return f"https://my.click.uz/services/pay?service_id=YOUR_SERVICE_ID&merchant_id=YOUR_MERCHANT_ID&amount={payment.amount}&transaction_param={payment.payment_id}"
+    from django.conf import settings
+    
+    # Параметры для Click
+    params = {
+        'service_id': getattr(settings, 'CLICK_SERVICE_ID', 'YOUR_SERVICE_ID'),
+        'merchant_id': getattr(settings, 'CLICK_MERCHANT_ID', 'YOUR_MERCHANT_ID'),
+        'amount': int(payment.amount),
+        'transaction_param': payment.payment_id,
+        'return_url': f"{settings.FRONTEND_URL}/payment/success/",
+        'cancel_url': f"{settings.FRONTEND_URL}/payment/cancel/"
+    }
+    
+    query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+    return f"https://my.click.uz/services/pay?{query_string}"
 
 def create_payme_payment(payment):
     """Создание платежа через Payme"""
-    # Здесь будет интеграция с Payme API
     import base64
     import json
+    from django.conf import settings
     
     params = {
-        'merchant': 'YOUR_MERCHANT_ID',
+        'merchant': getattr(settings, 'PAYME_MERCHANT_ID', 'YOUR_MERCHANT_ID'),
         'amount': int(payment.amount * 100),  # Payme работает в тийинах
         'account': {
             'booking_id': payment.booking.id
-        }
+        },
+        'return_url': f"{settings.FRONTEND_URL}/payment/success/",
+        'cancel_url': f"{settings.FRONTEND_URL}/payment/cancel/"
     }
     
     encoded_params = base64.b64encode(json.dumps(params).encode()).decode()
     return f"https://checkout.paycom.uz/{encoded_params}"
 
+def create_uzcard_payment(payment):
+    """Создание платежа через UzCard"""
+    from django.conf import settings
+    
+    # Параметры для UzCard
+    params = {
+        'merchant_id': getattr(settings, 'UZCARD_MERCHANT_ID', 'YOUR_MERCHANT_ID'),
+        'amount': int(payment.amount),
+        'order_id': payment.payment_id,
+        'return_url': f"{settings.FRONTEND_URL}/payment/success/",
+        'cancel_url': f"{settings.FRONTEND_URL}/payment/cancel/"
+    }
+    
+    query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+    return f"https://payment.uzcard.uz/pay?{query_string}"
 @api_view(['GET'])
 @permission_classes([permissions.IsAdminUser])
 def booking_statistics(request):
@@ -245,3 +278,19 @@ def booking_statistics(request):
     }
     
     return Response(stats)
+
+def create_humo_payment(payment):
+    """Создание платежа через Humo"""
+    from django.conf import settings
+    
+    # Параметры для Humo
+    params = {
+        'merchant_id': getattr(settings, 'HUMO_MERCHANT_ID', 'YOUR_MERCHANT_ID'),
+        'amount': int(payment.amount),
+        'order_id': payment.payment_id,
+        'return_url': f"{settings.FRONTEND_URL}/payment/success/",
+        'cancel_url': f"{settings.FRONTEND_URL}/payment/cancel/"
+    }
+    
+    query_string = '&'.join([f"{k}={v}" for k, v in params.items()])
+    return f"https://payment.humo.tj/pay?{query_string}"

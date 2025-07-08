@@ -5,6 +5,12 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from .models import Zone, Table, MenuCategory, MenuItem, RestaurantSettings
 
+class MenuItemInline(admin.TabularInline):
+    """Инлайн для блюд в категории"""
+    model = MenuItem
+    extra = 0
+    fields = ['name', 'price', 'is_available', 'is_special', 'sort_order']
+    readonly_fields = []
 @admin.register(Zone)
 class ZoneAdmin(admin.ModelAdmin):
     """Админ-панель для зон"""
@@ -23,10 +29,11 @@ class ZoneAdmin(admin.ModelAdmin):
 class TableAdmin(admin.ModelAdmin):
     """Админ-панель для столиков"""
     
-    list_display = ['name', 'zone', 'capacity', 'current_status', 'is_vip', 'is_active', 'price_per_hour', 'position_display']
+    list_display = ['image_preview', 'name', 'zone', 'capacity', 'current_status', 'is_vip', 'is_active', 'price_per_hour', 'position_display']
     list_filter = ['zone', 'is_active', 'is_vip', 'capacity']
     search_fields = ['name', 'description']
     ordering = ['zone', 'name']
+    list_editable = ['is_active', 'is_vip', 'price_per_hour']
     
     fieldsets = (
         ('Основная информация', {
@@ -45,6 +52,16 @@ class TableAdmin(admin.ModelAdmin):
             'description': 'Координаты столика на плане зала (в пикселях)'
         }),
     )
+    
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;" />',
+                obj.image.url
+            )
+        return format_html('<div style="width: 50px; height: 50px; background: #f0f0f0; border-radius: 5px; display: flex; align-items: center; justify-content: center;"><i class="fas fa-table" style="color: #ccc;"></i></div>')
+    image_preview.short_description = 'Фото'
+    image_preview.allow_tags = True
     
     def current_status(self, obj):
         status = obj.current_status
@@ -113,6 +130,7 @@ class MenuCategoryAdmin(admin.ModelAdmin):
     search_fields = ['name', 'description']
     prepopulated_fields = {'slug': ('name',)}
     ordering = ['sort_order', 'name']
+    inlines = [MenuItemInline]
     
     def items_count(self, obj):
         return obj.items.count()
@@ -122,11 +140,13 @@ class MenuCategoryAdmin(admin.ModelAdmin):
 class MenuItemAdmin(admin.ModelAdmin):
     """Админ-панель для блюд меню"""
     
-    list_display = ['name', 'category', 'price', 'is_available', 'is_special', 'cooking_time']
+    list_display = ['image_preview', 'name', 'category', 'price', 'is_available', 'is_special', 'cooking_time']
     list_filter = ['category', 'is_available', 'is_special', 'is_vegetarian', 'is_vegan', 'is_gluten_free']
     search_fields = ['name', 'description', 'ingredients']
     prepopulated_fields = {'slug': ('name',)}
     ordering = ['category', 'sort_order', 'name']
+    list_editable = ['price', 'is_available', 'is_special']
+    list_per_page = 25
     
     fieldsets = (
         ('Основная информация', {
@@ -143,6 +163,16 @@ class MenuItemAdmin(admin.ModelAdmin):
             'classes': ('collapse',)
         }),
     )
+    
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 5px;" />',
+                obj.image.url
+            )
+        return format_html('<div style="width: 50px; height: 50px; background: #f0f0f0; border-radius: 5px; display: flex; align-items: center; justify-content: center;"><i class="fas fa-image" style="color: #ccc;"></i></div>')
+    image_preview.short_description = 'Изображение'
+    image_preview.allow_tags = True
 
 @admin.register(RestaurantSettings)
 class RestaurantSettingsAdmin(admin.ModelAdmin):

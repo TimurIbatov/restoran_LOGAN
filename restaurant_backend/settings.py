@@ -215,6 +215,14 @@ CLICK_SECRET_KEY = config('CLICK_SECRET_KEY', default='')
 PAYME_MERCHANT_ID = config('PAYME_MERCHANT_ID', default='')
 PAYME_SECRET_KEY = config('PAYME_SECRET_KEY', default='')
 
+# UzCard settings
+UZCARD_MERCHANT_ID = config('UZCARD_MERCHANT_ID', default='')
+UZCARD_SECRET_KEY = config('UZCARD_SECRET_KEY', default='')
+
+# Humo settings
+HUMO_MERCHANT_ID = config('HUMO_MERCHANT_ID', default='')
+HUMO_SECRET_KEY = config('HUMO_SECRET_KEY', default='')
+
 # Logging
 LOGGING = {
     'version': 1,

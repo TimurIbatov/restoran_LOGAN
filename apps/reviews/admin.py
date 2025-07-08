@@ -1,11 +1,22 @@
 from django.contrib import admin
 from django.utils.html import format_html
+from django.utils import timezone
 from .models import Review, ReviewImage, ReviewResponse
 
 class ReviewImageInline(admin.TabularInline):
     """Инлайн для изображений отзывов"""
     model = ReviewImage
     extra = 0
+    readonly_fields = ['image_preview']
+    
+    def image_preview(self, obj):
+        if obj.image:
+            return format_html(
+                '<img src="{}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 5px;" />',
+                obj.image.url
+            )
+        return "Нет изображения"
+    image_preview.short_description = 'Превью'
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
@@ -23,6 +34,8 @@ class ReviewAdmin(admin.ModelAdmin):
     readonly_fields = ['created_at', 'updated_at', 'average_rating']
     date_hierarchy = 'created_at'
     ordering = ['-created_at']
+    list_editable = ['is_published', 'is_verified']
+    list_per_page = 25
     
     fieldsets = (
         ('Основная информация', {
