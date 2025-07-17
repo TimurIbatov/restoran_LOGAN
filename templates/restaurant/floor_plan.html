@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>План зала - Ресторан "LOGAN"</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .floor-plan-container {
+            position: relative;
+            width: 100%;
+            height: 600px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .zone {
+            position: absolute;
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            background: rgba(102, 126, 234, 0.1);
+            padding: 10px;
+        }
+        
+        .zone-label {
+            position: absolute;
+            top: -15px;
+            left: 10px;
+            background: #667eea;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+        
+        .table {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.8em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            border: 3px solid white;
+        }
+        
+        .table:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        
+        .table.available {
+            background: linear-gradient(135deg, #2ecc71, #27ae60);
+            color: white;
+        }
+        
+        .table.occupied {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+        }
+        
+        .table.reserved {
+            background: linear-gradient(135deg, #f39c12, #e67e22);
+            color: white;
+        }
+        
+        .table.vip {
+            background: linear-gradient(135deg, #9b59b6, #8e44ad);
+            color: white;
+            border-color: gold;
+        }
+        
+        .table-info {
+            position: absolute;
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 1000;
+            min-width: 250px;
+            display: none;
+        }
+        
+        .legend {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .control-btn {
+            background: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .control-btn:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .zone-selector {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            border-radius: 10px;
+            padding: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .zone-btn {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 20px;
+            padding: 5px 15px;
+            margin: 2px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .zone-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid py-4">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">
+                    <i class="bi bi-diagram-3 me-2"></i>
+                    План зала ресторана "LOGAN"
+                </h1>
+                
+                <div class="floor-plan-container" id="floorPlan">
+                    <!-- Селектор зон -->
+                    <div class="zone-selector">
+                        <div class="mb-2"><strong>Зоны:</strong></div>
+                        <button class="zone-btn active" data-zone="all">Все</button>
+                        <div id="zoneButtons"></div>
+                    </div>
+                    
+                    <!-- Легенда -->
+                    <div class="legend">
+                        <h6 class="mb-3">Статус столиков</h6>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: linear-gradient(135deg, #2ecc71, #27ae60);"></div>
+                            <span>Свободен</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: linear-gradient(135deg, #f39c12, #e67e22);"></div>
+                            <span>Забронирован</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: linear-gradient(135deg, #e74c3c, #c0392b);"></div>
+                            <span>Занят</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color" style="background: linear-gradient(135deg, #9b59b6, #8e44ad); border: 2px solid gold;"></div>
+                            <span>VIP столик</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Элементы управления -->
+                    <div class="controls">
+                        <button class="control-btn" onclick="zoomIn()" title="Увеличить">
+                            <i class="bi bi-zoom-in"></i>
+                        </button>
+                        <button class="control-btn" onclick="zoomOut()" title="Уменьшить">
+                            <i class="bi bi-zoom-out"></i>
+                        </button>
+                        <button class="control-btn" onclick="resetView()" title="Сбросить">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                    </div>
+                    
+                    <!-- Зоны и столики будут добавлены динамически -->
+                </div>
+                
+                <!-- Информация о столике -->
+                <div class="table-info" id="tableInfo">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0" id="tableInfoTitle">Столик #1</h5>
+                        <button type="button" class="btn-close" onclick="hideTableInfo()"></button>
+                    </div>
+                    <div id="tableInfoContent">
+                        <!-- Содержимое будет добавлено динамически -->
+                    </div>
+                    <div class="mt-3">
+                        <button class="btn btn-primary btn-sm" onclick="bookTable()">
+                            <i class="bi bi-calendar-plus me-1"></i>
+                            Забронировать
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let floorPlanData = null;
+        let currentZoom = 1;
+        let selectedTable = null;
+        
+        // Предустановленные позиции для зон (можно настроить)
+        const zonePositions = {
+            'main': { x: 50, y: 100, width: 400, height: 200 },
+            'vip': { x: 500, y: 100, width: 200, height: 150 },
+            'terrace': { x: 150, y: 350, width: 300, height: 180 }
+        };
+        
+        // Предустановленные позиции столиков (если не заданы в БД)
+        const defaultTablePositions = {
+            1: { x: 100, y: 150 },
+            2: { x: 200, y: 150 },
+            3: { x: 300, y: 150 },
+            4: { x: 150, y: 220 },
+            5: { x: 250, y: 220 },
+            6: { x: 550, y: 150 },
+            7: { x: 600, y: 150 },
+            8: { x: 200, y: 400 },
+            9: { x: 300, y: 400 },
+            10: { x: 400, y: 400 }
+        };
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            loadFloorPlan();
+        });
+        
+        async function loadFloorPlan() {
+            try {
+                const response = await fetch('/api/restaurant/floor-plan/');
+                floorPlanData = await response.json();
+                renderFloorPlan();
+            } catch (error) {
+                console.error('Ошибка загрузки плана зала:', error);
+            }
+        }
+        
+        function renderFloorPlan() {
+            const container = document.getElementById('floorPlan');
+            const zoneButtons = document.getElementById('zoneButtons');
+            
+            // Очищаем контейнер
+            const existingElements = container.querySelectorAll('.zone, .table');
+            existingElements.forEach(el => el.remove());
+            
+            // Добавляем кнопки зон
+            zoneButtons.innerHTML = '';
+            floorPlanData.zones.forEach(zone => {
+                const btn = document.createElement('button');
+                btn.className = 'zone-btn';
+                btn.textContent = zone.name;
+                btn.dataset.zone = zone.slug;
+                btn.onclick = () => filterByZone(zone.slug);
+                zoneButtons.appendChild(btn);
+            });
+            
+            // Отрисовываем зоны
+            floorPlanData.zones.forEach(zone => {
+                const zoneEl = createZoneElement(zone);
+                container.appendChild(zoneEl);
+            });
+            
+            // Отрисовываем столики
+            floorPlanData.tables.forEach(table => {
+                const tableEl = createTableElement(table);
+                container.appendChild(tableEl);
+            });
+        }
+        
+        function createZoneElement(zone) {
+            const zoneEl = document.createElement('div');
+            zoneEl.className = 'zone';
+            zoneEl.dataset.zone = zone.slug;
+            
+            const position = zonePositions[zone.slug] || { x: 50, y: 50, width: 300, height: 200 };
+            
+            zoneEl.style.left = position.x + 'px';
+            zoneEl.style.top = position.y + 'px';
+            zoneEl.style.width = position.width + 'px';
+            zoneEl.style.height = position.height + 'px';
+            
+            const label = document.createElement('div');
+            label.className = 'zone-label';
+            label.textContent = zone.name;
+            zoneEl.appendChild(label);
+            
+            return zoneEl;
+        }
+        
+        function createTableElement(table) {
+            const tableEl = document.createElement('div');
+            tableEl.className = `table ${table.status}`;
+            tableEl.dataset.tableId = table.id;
+            tableEl.dataset.zone = table.zone_id;
+            
+            if (table.is_vip) {
+                tableEl.classList.add('vip');
+            }
+            
+            // Используем позицию из БД или предустановленную
+            const x = table.position_x || defaultTablePositions[table.id]?.x || Math.random() * 600;
+            const y = table.position_y || defaultTablePositions[table.id]?.y || Math.random() * 400;
+            
+            tableEl.style.left = x + 'px';
+            tableEl.style.top = y + 'px';
+            
+            tableEl.textContent = table.name;
+            tableEl.title = `${table.name} (${table.capacity} мест)`;
+            
+            tableEl.onclick = () => showTableInfo(table);
+            
+            return tableEl;
+        }
+        
+        function showTableInfo(table) {
+            selectedTable = table;
+            const infoEl = document.getElementById('tableInfo');
+            const titleEl = document.getElementById('tableInfoTitle');
+            const contentEl = document.getElementById('tableInfoContent');
+            
+            titleEl.textContent = table.name;
+            
+            const statusText = {
+                'available': 'Свободен',
+                'occupied': 'Занят',
+                'reserved': 'Забронирован'
+            };
+            
+            contentEl.innerHTML = `
+                <div class="row">
+                    <div class="col-6">
+                        <strong>Зона:</strong><br>
+                        ${table.zone_name}
+                    </div>
+                    <div class="col-6">
+                        <strong>Вместимость:</strong><br>
+                        ${table.capacity} человек
+                    </div>
+                </div>
+                <div class="row mt-2">
+                    <div class="col-6">
+                        <strong>Статус:</strong><br>
+                        <span class="badge bg-${table.status === 'available' ? 'success' : table.status === 'occupied' ? 'danger' : 'warning'}">
+                            ${statusText[table.status] || table.status}
+                        </span>
+                    </div>
+                    <div class="col-6">
+                        <strong>Тип:</strong><br>
+                        ${table.is_vip ? 'VIP столик' : 'Обычный'}
+                    </div>
+                </div>
+                ${table.features && table.features.length > 0 ? `
+                    <div class="mt-2">
+                        <strong>Особенности:</strong><br>
+                        ${table.features.join(', ')}
+                    </div>
+                ` : ''}
+            `;
+            
+            // Позиционируем информационное окно
+            const tableEl = document.querySelector(`[data-table-id="${table.id}"]`);
+            const rect = tableEl.getBoundingClientRect();
+            const containerRect = document.getElementById('floorPlan').getBoundingClientRect();
+            
+            infoEl.style.left = (rect.left - containerRect.left + 70) + 'px';
+            infoEl.style.top = (rect.top - containerRect.top) + 'px';
+            infoEl.style.display = 'block';
+        }
+        
+        function hideTableInfo() {
+            document.getElementById('tableInfo').style.display = 'none';
+            selectedTable = null;
+        }
+        
+        function filterByZone(zoneSlug) {
+            // Обновляем активную кнопку
+            document.querySelectorAll('.zone-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.zone === zoneSlug) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Показываем/скрываем элементы
+            if (zoneSlug === 'all') {
+                document.querySelectorAll('.zone, .table').forEach(el => {
+                    el.style.display = 'block';
+                });
+            } else {
+                document.querySelectorAll('.zone').forEach(el => {
+                    el.style.display = el.dataset.zone === zoneSlug ? 'block' : 'none';
+                });
+                
+                document.querySelectorAll('.table').forEach(el => {
+                    const table = floorPlanData.tables.find(t => t.id == el.dataset.tableId);
+                    el.style.display = table && table.zone_id == getZoneIdBySlug(zoneSlug) ? 'block' : 'none';
+                });
+            }
+        }
+        
+        function getZoneIdBySlug(slug) {
+            const zone = floorPlanData.zones.find(z => z.slug === slug);
+            return zone ? zone.id : null;
+        }
+        
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom * 1.2, 3);
+            applyZoom();
+        }
+        
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom / 1.2, 0.5);
+            applyZoom();
+        }
+        
+        function resetView() {
+            currentZoom = 1;
+            applyZoom();
+        }
+        
+        function applyZoom() {
+            const container = document.getElementById('floorPlan');
+            container.style.transform = `scale(${currentZoom})`;
+            container.style.transformOrigin = 'top left';
+        }
+        
+        function bookTable() {
+            if (selectedTable) {
+                // Перенаправляем на страницу бронирования с выбранным столиком
+                window.location.href = `/booking?table=${selectedTable.id}`;
+            }
+        }
+        
+        // Обновление статуса столиков в реальном времени (можно добавить WebSocket)
+        function updateTableStatuses() {
+            // Здесь можно добавить логику обновления статусов через WebSocket или периодические запросы
+        }
+        
+        // Обновляем статусы каждые 30 секунд
+        setInterval(updateTableStatuses, 30000);
+    </script>
+</body>
+</html>
